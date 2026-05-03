@@ -1,12 +1,23 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, firebaseReady } from '../lib/firebase';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { 
+  onAuthStateChanged, 
+  User as FirebaseUser,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  GoogleAuthProvider,
+  signInWithPopup
+} from 'firebase/auth';
 import { User } from '../types';
 
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
   isFirebase: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -31,18 +42,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const localUser = localStorage.getItem('delta_local_user');
       if (localUser) {
         setUser(JSON.parse(localUser));
-      } else {
-        const newUser = { uid: 'dev-user-001', email: 'dev@delta.local' };
-        localStorage.setItem('delta_local_user', JSON.stringify(newUser));
-        setUser(newUser);
       }
       setLoading(false);
     }
   }, []);
 
+  const signIn = async (email: string, password: string) => {
+    if (firebaseReady && auth) {
+      await signInWithEmailAndPassword(auth, email, password);
+    } else {
+      const mockUser = { uid: 'mock-user-' + Date.now(), email };
+      localStorage.setItem('delta_local_user', JSON.stringify(mockUser));
+      setUser(mockUser);
+    }
+  };
+
+  const signUp = async (email: string, password: string) => {
+    if (firebaseReady && auth) {
+      await createUserWithEmailAndPassword(auth, email, password);
+    } else {
+      const mockUser = { uid: 'mock-user-' + Date.now(), email };
+      localStorage.setItem('delta_local_user', JSON.stringify(mockUser));
+      setUser(mockUser);
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    if (firebaseReady && auth) {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } else {
+      const mockUser = { uid: 'google-mock-' + Date.now(), email: 'google-user@dev.local' };
+      localStorage.setItem('delta_local_user', JSON.stringify(mockUser));
+      setUser(mockUser);
+    }
+  };
+
   const handleSignOut = async () => {
     if (firebaseReady && auth) {
-      await auth.signOut();
+      await firebaseSignOut(auth);
     } else {
       localStorage.removeItem('delta_local_user');
       setUser(null);
@@ -50,7 +88,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, isFirebase: firebaseReady, signOut: handleSignOut }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      isFirebase: firebaseReady, 
+      signIn, 
+      signUp, 
+      signInWithGoogle,
+      signOut: handleSignOut 
+    }}>
       {children}
     </AuthContext.Provider>
   );
