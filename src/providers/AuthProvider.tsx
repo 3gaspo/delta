@@ -17,7 +17,6 @@ interface AuthContextValue {
   isFirebase: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -94,7 +93,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isFirebase: firebaseReady, 
       signIn, 
       signUp, 
-      signInWithGoogle,
       signOut: handleSignOut 
     }}>
       {children}

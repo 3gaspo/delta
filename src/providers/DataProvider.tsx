@@ -174,11 +174,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, authLoading, seedDefaults]);
 
+  const cleanData = (obj: any) => {
+    const clean: any = {};
+    Object.keys(obj).forEach(key => {
+      if (obj[key] !== undefined) {
+        clean[key] = obj[key];
+      }
+    });
+    return clean;
+  };
+
   // Actions
   const addTransaction = async (t: any) => {
     const id = crypto.randomUUID();
     const now = Date.now();
-    const docData = { ...t, id, createdAt: now, updatedAt: now };
+    const docData = cleanData({ ...t, id, createdAt: now, updatedAt: now });
     if (firebaseReady && db && user) {
       await setDoc(doc(db, `users/${user.uid}/transactions`, id), docData);
     } else if (user) {
@@ -191,8 +201,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateTransaction = async (id: string, t: any) => {
     const now = Date.now();
+    const docData = cleanData({ ...t, updatedAt: now });
     if (firebaseReady && db && user) {
-      await updateDoc(doc(db, `users/${user.uid}/transactions`, id), { ...t, updatedAt: now });
+      await updateDoc(doc(db, `users/${user.uid}/transactions`, id), docData);
     } else if (user) {
       const existing = JSON.parse(localStorage.getItem(`delta_${user.uid}_transactions`) || '[]');
       const updated = existing.map((item: any) => item.id === id ? { ...item, ...t, updatedAt: now } : item);
@@ -215,7 +226,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const addAccount = async (a: any) => {
     const id = crypto.randomUUID();
     const now = Date.now();
-    const docData = { ...a, id, createdAt: now, updatedAt: now } as Account;
+    const docData = cleanData({ ...a, id, createdAt: now, updatedAt: now });
     if (firebaseReady && db && user) {
       await setDoc(doc(db, `users/${user.uid}/accounts`, id), docData);
     } else if (user) {
@@ -229,8 +240,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateAccount = async (id: string, a: any) => {
     const now = Date.now();
+    const docData = cleanData({ ...a, updatedAt: now });
     if (firebaseReady && db && user) {
-      await updateDoc(doc(db, `users/${user.uid}/accounts`, id), { ...a, updatedAt: now });
+      await updateDoc(doc(db, `users/${user.uid}/accounts`, id), docData);
     } else if (user) {
       const existing = JSON.parse(localStorage.getItem(`delta_${user.uid}_accounts`) || '[]');
       const updated = existing.map((item: any) => item.id === id ? { ...item, ...a, updatedAt: now } : item);
@@ -259,7 +271,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const id = crypto.randomUUID();
     const now = Date.now();
     const color = c.color || CHART_COLORS[data.categories.length % CHART_COLORS.length];
-    const docData = { ...c, id, color, createdAt: now, updatedAt: now };
+    const docData = cleanData({ ...c, id, color, createdAt: now, updatedAt: now });
     if (firebaseReady && db && user) {
       await setDoc(doc(db, `users/${user.uid}/categories`, id), docData);
     } else if (user) {
@@ -272,8 +284,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateCategory = async (id: string, c: any) => {
     const now = Date.now();
+    const docData = cleanData({ ...c, updatedAt: now });
     if (firebaseReady && db && user) {
-      await updateDoc(doc(db, `users/${user.uid}/categories`, id), { ...c, updatedAt: now });
+      await updateDoc(doc(db, `users/${user.uid}/categories`, id), docData);
     } else if (user) {
       const existing = JSON.parse(localStorage.getItem(`delta_${user.uid}_categories`) || '[]');
       const updated = existing.map((item: any) => item.id === id ? { ...item, ...c, updatedAt: now } : item);
@@ -310,7 +323,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const addTag = async (t: any) => {
     const id = crypto.randomUUID();
     const now = Date.now();
-    const docData = { ...t, id, createdAt: now, updatedAt: now };
+    const docData = cleanData({ ...t, id, createdAt: now, updatedAt: now });
     if (firebaseReady && db && user) {
       await setDoc(doc(db, `users/${user.uid}/tags`, id), docData);
     } else if (user) {
@@ -323,8 +336,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateTag = async (id: string, t: any) => {
     const now = Date.now();
+    const docData = cleanData({ ...t, updatedAt: now });
     if (firebaseReady && db && user) {
-      await updateDoc(doc(db, `users/${user.uid}/tags`, id), { ...t, updatedAt: now });
+      await updateDoc(doc(db, `users/${user.uid}/tags`, id), docData);
     } else if (user) {
       const existing = JSON.parse(localStorage.getItem(`delta_${user.uid}_tags`) || '[]');
       const updated = existing.map((item: any) => item.id === id ? { ...item, ...t, updatedAt: now } : item);
@@ -356,8 +370,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateSettings = async (s: any) => {
     const now = Date.now();
+    const docData = cleanData({ ...s, updatedAt: now });
     if (firebaseReady && db && user) {
-      await updateDoc(doc(db, `users/${user.uid}/settings`, 'main'), { ...s, updatedAt: now });
+      await updateDoc(doc(db, `users/${user.uid}/settings`, 'main'), docData);
     } else if (user) {
       const existing = JSON.parse(localStorage.getItem(`delta_${user.uid}_settings`) || '{}');
       const updated = { ...existing, ...s, updatedAt: now };

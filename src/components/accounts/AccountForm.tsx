@@ -35,12 +35,15 @@ export function AccountForm({ onClose, initialData }: AccountFormProps) {
     try {
       if (!formData.name) throw new Error('Name is required');
 
-      const submission = {
+      const submission: any = {
         name: formData.name,
         type: formData.type,
-        debtDirection: formData.type === 'debt' ? formData.debtDirection : undefined,
         archived: formData.archived
       };
+
+      if (formData.type === 'debt') {
+        submission.debtDirection = formData.debtDirection;
+      }
 
       let accountId = initialData?.id;
 
