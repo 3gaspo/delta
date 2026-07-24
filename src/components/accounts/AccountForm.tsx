@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useData } from '../../providers/DataProvider';
 import { Account, AccountType, DebtDirection, Transaction } from '../../types';
 import { Button, Input, Select } from '../ui/Base';
-import { Landmark, AlignLeft, ShieldCheck, Archive, Wallet } from 'lucide-react';
+import { Landmark, AlignLeft, ShieldCheck, Archive, Wallet, EyeOff } from 'lucide-react';
 import { getAccountBalance } from '../../utils/financial';
 import { parseMoney } from '../../lib/utils';
 
@@ -21,6 +21,7 @@ export function AccountForm({ onClose, initialData }: AccountFormProps) {
     type: initialData?.type || 'regular' as AccountType,
     debtDirection: initialData?.debtDirection || 'payable' as DebtDirection,
     archived: initialData?.archived || false,
+    hidden: initialData?.hidden || false,
     balance: initialData ? currentBalance.toString() : '0'
   });
 
@@ -38,7 +39,8 @@ export function AccountForm({ onClose, initialData }: AccountFormProps) {
       const submission: any = {
         name: formData.name,
         type: formData.type,
-        archived: formData.archived
+        archived: formData.archived,
+        hidden: formData.hidden
       };
 
       if (formData.type === 'debt') {
@@ -64,12 +66,14 @@ export function AccountForm({ onClose, initialData }: AccountFormProps) {
           amount: Math.abs(diff),
           date: Date.now(),
           accountId: accountId,
-          categoryId: '', // Correction category could be added or just empty
+          categoryId: '',
           tagIds: [],
           type: diff > 0 ? 'income' : 'expense',
           status: 'normal',
+          name: initialData ? `Balance Correction of ${formData.name}` : `Initial Balance of ${formData.name}`,
           description: initialData ? 'Balance Correction' : 'Initial Balance',
-          isCorrection: true
+          isCorrection: true,
+          isInitialBalance: !initialData
         });
       }
 
@@ -150,20 +154,38 @@ export function AccountForm({ onClose, initialData }: AccountFormProps) {
           )}
         </div>
 
-        {initialData && (
+        <div className="space-y-2">
           <label className="flex items-center gap-3 p-4 bg-black/5 dark:bg-white/5 rounded-2xl cursor-pointer">
             <input 
               type="checkbox" 
-              checked={formData.archived}
-              onChange={e => setFormData({ ...formData, archived: e.target.checked })}
+              checked={formData.hidden}
+              onChange={e => setFormData({ ...formData, hidden: e.target.checked })}
               className="w-5 h-5 rounded-lg border-none bg-black/10 text-black focus:ring-0"
             />
-            <div className="flex items-center gap-2">
-              <Archive size={16} />
-              <span className="text-sm font-bold uppercase tracking-wider">Archived Account</span>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-2">
+                <EyeOff size={16} />
+                <span className="text-sm font-bold uppercase tracking-wider">Hide Account</span>
+              </div>
+              <span className="text-[10px] opacity-40">Excluded from net worth and aggregate metrics</span>
             </div>
           </label>
-        )}
+
+          {initialData && (
+            <label className="flex items-center gap-3 p-4 bg-black/5 dark:bg-white/5 rounded-2xl cursor-pointer">
+              <input 
+                type="checkbox" 
+                checked={formData.archived}
+                onChange={e => setFormData({ ...formData, archived: e.target.checked })}
+                className="w-5 h-5 rounded-lg border-none bg-black/10 text-black focus:ring-0"
+              />
+              <div className="flex items-center gap-2">
+                <Archive size={16} />
+                <span className="text-sm font-bold uppercase tracking-wider">Archived Account</span>
+              </div>
+            </label>
+          )}
+        </div>
       </div>
 
       <div className="space-y-3">

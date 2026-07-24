@@ -23,8 +23,14 @@ export default function Home() {
 
   const totals = useMemo(() => computeFinancialTotals(accounts, transactions), [accounts, transactions]);
 
+  const hiddenAccountIds = useMemo(() => new Set(accounts.filter(a => a.hidden).map(a => a.id)), [accounts]);
+
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
+      // Hide all related transactions of a hidden account (except for transfers)
+      if (t.type !== 'transfer' && hiddenAccountIds.has(t.accountId)) {
+        return false;
+      }
       if (search) {
         const query = search.toLowerCase();
         const cat = categories.find(c => c.id === t.categoryId)?.label.toLowerCase() || '';

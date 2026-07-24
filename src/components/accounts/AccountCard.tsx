@@ -2,7 +2,7 @@ import { Account } from '../../types';
 import { useData } from '../../providers/DataProvider';
 import { formatCurrency, cn } from '../../lib/utils';
 import { getAccountBalance } from '../../utils/financial';
-import { Wallet, Landmark, TrendingDown, TrendingUp } from 'lucide-react';
+import { Wallet, Landmark, TrendingDown, TrendingUp, EyeOff } from 'lucide-react';
 
 export function AccountCard({ account, onClick }: any) {
   const { transactions, settings } = useData();
@@ -16,7 +16,8 @@ export function AccountCard({ account, onClick }: any) {
       onClick={onClick}
       className={cn(
         "w-full text-left p-6 flex flex-col gap-4 transition-all active:scale-[0.98]",
-        account.archived && "opacity-40"
+        account.archived && "opacity-40",
+        account.hidden && "opacity-60 bg-black/[0.02] dark:bg-white/[0.02]"
       )}
     >
       <div className="flex items-center justify-between">
@@ -30,9 +31,16 @@ export function AccountCard({ account, onClick }: any) {
             ? (isReceivable ? <TrendingUp size={20} /> : <TrendingDown size={20} />)
             : <Landmark size={20} />}
         </div>
-        {account.archived && (
-          <span className="text-[10px] font-black bg-black/10 dark:bg-white/10 px-2 py-1 rounded-full uppercase">Archived</span>
-        )}
+        <div className="flex items-center gap-1.5">
+          {account.hidden && (
+            <span className="text-[10px] font-black bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-2 py-1 rounded-full uppercase flex items-center gap-1">
+              <EyeOff size={10} /> Hidden
+            </span>
+          )}
+          {account.archived && (
+            <span className="text-[10px] font-black bg-black/10 dark:bg-white/10 px-2 py-1 rounded-full uppercase">Archived</span>
+          )}
+        </div>
       </div>
 
       <div>

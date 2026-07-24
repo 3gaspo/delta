@@ -39,6 +39,19 @@ const DEFAULT_TAGS = [
   { label: 'Optional' },
 ];
 
+const dedupeCategories = (cats: Category[]): Category[] => {
+  const seen = new Set<string>();
+  const result: Category[] = [];
+  for (const c of cats) {
+    const key = (c.label || '').trim().toLowerCase();
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      result.push(c);
+    }
+  }
+  return result;
+};
+
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const { user, loading: authLoading } = useAuth();
   const [data, setData] = useState<{
@@ -129,7 +142,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       const unsubCategories = onSnapshot(collection(db, `users/${uid}/categories`), (snap) => {
         const categories = snap.docs.map(d => d.data() as Category);
-        setData(prev => ({ ...prev, categories }));
+        setData(prev => ({ ...prev, categories: dedupeCategories(categories) }));
       });
 
       const unsubTags = onSnapshot(collection(db, `users/${uid}/tags`), (snap) => {
@@ -164,7 +177,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setData({
           accounts: JSON.parse(localStorage.getItem(`delta_${uid}_accounts`) || '[]'),
           transactions: JSON.parse(localStorage.getItem(`delta_${uid}_transactions`) || '[]'),
-          categories: JSON.parse(localStorage.getItem(`delta_${uid}_categories`) || '[]'),
+          categories: dedupeCategories(JSON.parse(localStorage.getItem(`delta_${uid}_categories`) || '[]')),
           tags: JSON.parse(localStorage.getItem(`delta_${uid}_tags`) || '[]'),
           settings: JSON.parse(s)
         });
@@ -173,6 +186,79 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       loadLocal();
     }
   }, [user, authLoading, seedDefaults]);
+
+  // Auto-generate recurring transactions
+  useEffect(() => {
+    if (!user || loading || data.transactions.length === 0) return;
+
+    const recurring = data.transactions.filter(t => t.periodicityDays && t.periodicityDays > 0);
+    if (recurring.length === 0) return;
+
+    const uid = user.uid;
+    const now = Date.now();
+    const newTransactionsToCreate: any[] = [];
+    const recurringUpdates: { id: string; lastGeneratedDate: number }[] = [];
+
+    for (const t of recurring) {
+      const periodDays = t.periodicityDays!;
+      const periodMs = periodDays * 86400000;
+      let lastDate = t.lastGeneratedDate || t.date;
+
+      let iterations = 0;
+      while (lastDate + periodMs <= now && iterations < 100) {
+        iterations++;
+        const nextDate = lastDate + periodMs;
+        const newId = crypto.randomUUID();
+        const createdAt = Date.now();
+
+        newTransactionsToCreate.push({
+          id: newId,
+          amount: t.amount,
+          date: nextDate,
+          accountId: t.accountId,
+          categoryId: t.categoryId || '',
+          tagIds: t.tagIds || [],
+          type: t.type,
+          status: t.status || 'normal',
+          name: t.name,
+          description: t.description ? `${t.description} (Auto-recurring)` : 'Auto-recurring transaction',
+          transferAccountId: t.transferAccountId,
+          createdAt,
+          updatedAt: createdAt
+        });
+
+        lastDate = nextDate;
+      }
+
+      if (iterations > 0) {
+        recurringUpdates.push({ id: t.id, lastGeneratedDate: lastDate });
+      }
+    }
+
+    if (newTransactionsToCreate.length > 0) {
+      const processRecurring = async () => {
+        if (firebaseReady && db && user) {
+          const batch = writeBatch(db);
+          newTransactionsToCreate.forEach(nt => {
+            batch.set(doc(db, `users/${uid}/transactions`, nt.id), nt);
+          });
+          recurringUpdates.forEach(ru => {
+            batch.update(doc(db, `users/${uid}/transactions`, ru.id), { lastGeneratedDate: ru.lastGeneratedDate, updatedAt: Date.now() });
+          });
+          await batch.commit();
+        } else {
+          const existing = JSON.parse(localStorage.getItem(`delta_${uid}_transactions`) || '[]');
+          let updated = [...existing, ...newTransactionsToCreate];
+          recurringUpdates.forEach(ru => {
+            updated = updated.map((item: any) => item.id === ru.id ? { ...item, lastGeneratedDate: ru.lastGeneratedDate, updatedAt: Date.now() } : item);
+          });
+          localStorage.setItem(`delta_${uid}_transactions`, JSON.stringify(updated));
+          setData(prev => ({ ...prev, transactions: updated }));
+        }
+      };
+      processRecurring();
+    }
+  }, [data.transactions, user, loading]);
 
   const cleanData = (obj: any) => {
     const clean: any = {};
@@ -218,6 +304,67 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     } else if (user) {
       const existing = JSON.parse(localStorage.getItem(`delta_${user.uid}_transactions`) || '[]');
       const updated = existing.filter((item: any) => item.id !== id);
+      localStorage.setItem(`delta_${user.uid}_transactions`, JSON.stringify(updated));
+      setData(prev => ({ ...prev, transactions: updated }));
+    }
+  };
+
+  const saveGroupTransaction = async (groupId: string, subtransactions: any[]) => {
+    if (!user) return;
+    const now = Date.now();
+    const existingGroupDocs = data.transactions.filter(t => t.groupId === groupId);
+    const existingIds = new Set<string>(existingGroupDocs.map((t: any) => t.id));
+    
+    const newGroupDocs: any[] = [];
+    const keptIds = new Set<string>();
+
+    subtransactions.forEach(st => {
+      const id = st.id || crypto.randomUUID();
+      keptIds.add(id);
+      newGroupDocs.push(cleanData({
+        ...st,
+        id,
+        groupId,
+        createdAt: st.createdAt || now,
+        updatedAt: now
+      }));
+    });
+
+    const deletedIds: string[] = [...existingIds].filter(id => !keptIds.has(id));
+
+    if (firebaseReady && db && user) {
+      const batch = writeBatch(db);
+      newGroupDocs.forEach(docData => {
+        batch.set(doc(db, `users/${user.uid}/transactions`, docData.id), docData);
+      });
+      deletedIds.forEach((id: string) => {
+        batch.delete(doc(db, `users/${user.uid}/transactions`, id));
+      });
+      await batch.commit();
+    } else if (user) {
+      const existing = JSON.parse(localStorage.getItem(`delta_${user.uid}_transactions`) || '[]');
+      const filtered = existing.filter((item: any) => !deletedIds.includes(item.id) && item.groupId !== groupId);
+      const updated = [...filtered, ...newGroupDocs];
+      localStorage.setItem(`delta_${user.uid}_transactions`, JSON.stringify(updated));
+      setData(prev => ({ ...prev, transactions: updated }));
+    }
+  };
+
+  const deleteGroupTransaction = async (groupId: string) => {
+    if (!user) return;
+    const groupDocs = data.transactions.filter(t => t.groupId === groupId);
+    const ids = groupDocs.map(t => t.id);
+    if (ids.length === 0) return;
+
+    if (firebaseReady && db && user) {
+      const batch = writeBatch(db);
+      ids.forEach(id => {
+        batch.delete(doc(db, `users/${user.uid}/transactions`, id));
+      });
+      await batch.commit();
+    } else if (user) {
+      const existing = JSON.parse(localStorage.getItem(`delta_${user.uid}_transactions`) || '[]');
+      const updated = existing.filter((item: any) => item.groupId !== groupId);
       localStorage.setItem(`delta_${user.uid}_transactions`, JSON.stringify(updated));
       setData(prev => ({ ...prev, transactions: updated }));
     }
@@ -420,7 +567,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     <DataContext.Provider value={{
       ...data,
       loading,
-      addTransaction, updateTransaction, deleteTransaction,
+      addTransaction, updateTransaction, deleteTransaction, saveGroupTransaction, deleteGroupTransaction,
       addAccount, updateAccount, deleteAccount,
       addCategory, updateCategory, deleteCategory,
       addTag, updateTag, deleteTag,

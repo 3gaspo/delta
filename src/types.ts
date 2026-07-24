@@ -9,6 +9,7 @@ export interface Account {
   createdAt: number;
   updatedAt: number;
   archived?: boolean;
+  hidden?: boolean;
   order?: number;
 }
 
@@ -27,10 +28,14 @@ export interface Transaction {
   name: string;
   description?: string;
   transferAccountId?: string;
+  periodicityDays?: number;
+  lastGeneratedDate?: number;
   createdAt: number;
   updatedAt: number;
   dedupeKey?: string;
   isCorrection?: boolean;
+  isInitialBalance?: boolean;
+  groupId?: string;
 }
 
 export interface Category {
@@ -75,6 +80,8 @@ export interface DataContextValue {
   addTransaction: (t: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateTransaction: (id: string, t: Partial<Transaction>) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
+  saveGroupTransaction: (groupId: string, subtransactions: any[]) => Promise<void>;
+  deleteGroupTransaction: (groupId: string) => Promise<void>;
   
   addAccount: (a: Omit<Account, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateAccount: (id: string, a: Partial<Account>) => Promise<void>;

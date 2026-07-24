@@ -26,7 +26,8 @@ export interface FinancialTotals {
 }
 
 export function computeFinancialTotals(accounts: Account[], transactions: Transaction[]): FinancialTotals {
-  const balances = accounts.reduce((acc, account) => {
+  const visibleAccounts = accounts.filter(a => !a.hidden);
+  const balances = visibleAccounts.reduce((acc, account) => {
     acc[account.id] = getAccountBalance(account.id, transactions);
     return acc;
   }, {} as Record<string, number>);
@@ -35,7 +36,7 @@ export function computeFinancialTotals(accounts: Account[], transactions: Transa
   let receivables = 0;
   let payables = 0;
 
-  accounts.forEach(account => {
+  visibleAccounts.forEach(account => {
     const bal = balances[account.id] || 0;
     if (account.type === 'regular') {
       regularBalance += bal;
@@ -75,8 +76,11 @@ export function getStatsAggregation(
     endDate: number;
   }
 ) {
+  const hiddenAccountIds = new Set(accounts.filter(a => a.hidden).map(a => a.id));
   const filtered = transactions.filter(t => {
     if (t.status === 'hidden') return false;
+    // Hide non-transfer transactions of hidden accounts
+    if (t.type !== 'transfer' && hiddenAccountIds.has(t.accountId)) return false;
     if (filters.accountId !== 'all' && t.accountId !== filters.accountId && t.transferAccountId !== filters.accountId) return false;
     if (filters.categoryId !== 'all' && t.categoryId !== filters.categoryId) return false;
     if (filters.tagId !== 'all' && !t.tagIds.includes(filters.tagId)) return false;
@@ -84,11 +88,13 @@ export function getStatsAggregation(
     return true;
   });
 
-  const income = filtered.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-  const expenses = filtered.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+  const nonInitial = filtered.filter(t => !t.isInitialBalance);
+
+  const income = nonInitial.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+  const expenses = nonInitial.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
   const netFlow = income - expenses;
 
-  const byCategory = filtered
+  const byCategory = nonInitial
     .filter(t => t.type === 'expense')
     .reduce((acc, t) => {
       acc[t.categoryId] = (acc[t.categoryId] || 0) + t.amount;

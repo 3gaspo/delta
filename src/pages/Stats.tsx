@@ -197,6 +197,7 @@ export default function Stats() {
       };
 
       intervalTransactions.forEach(t => {
+        if (t.isInitialBalance) return;
         const isExpense = t.type === 'expense' || t.type === 'subscription';
         const isIncome = t.type === 'income';
         
