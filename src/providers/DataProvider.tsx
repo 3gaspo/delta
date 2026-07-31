@@ -72,15 +72,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Sync state helper
   const seedDefaults = useCallback(async (uid: string) => {
     const now = Date.now();
-    
-    const mainAccount: Account = {
-      id: crypto.randomUUID(),
-      name: 'Main',
-      type: 'regular',
-      createdAt: now,
-      updatedAt: now,
-      order: 0
-    };
 
     const categories: Category[] = DEFAULT_CATEGORIES.map(c => ({
       ...c,
@@ -104,13 +95,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     if (firebaseReady && db) {
       const batch = writeBatch(db);
-      batch.set(doc(db, `users/${uid}/accounts`, mainAccount.id), mainAccount);
       categories.forEach(c => batch.set(doc(db, `users/${uid}/categories`, c.id), c));
       tags.forEach(t => batch.set(doc(db, `users/${uid}/tags`, t.id), t));
       batch.set(doc(db, `users/${uid}/settings`, 'main'), settings);
       await batch.commit();
     } else {
-      localStorage.setItem(`delta_${uid}_accounts`, JSON.stringify([mainAccount]));
+      localStorage.setItem(`delta_${uid}_accounts`, JSON.stringify([]));
       localStorage.setItem(`delta_${uid}_categories`, JSON.stringify(categories));
       localStorage.setItem(`delta_${uid}_tags`, JSON.stringify(tags));
       localStorage.setItem(`delta_${uid}_settings`, JSON.stringify(settings));

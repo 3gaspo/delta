@@ -240,6 +240,11 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && <p className="text-red-500 text-sm font-medium">{error}</p>}
+      {accounts.length === 0 && (
+        <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl text-xs font-semibold">
+          No accounts found. Please add an account in the Accounts tab before recording transactions.
+        </div>
+      )}
 
       {/* Mode Selector Toggle */}
       <div className="flex bg-black/5 dark:bg-white/5 p-1 rounded-2xl gap-1">
@@ -379,6 +384,7 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
                 onChange={e => setFormData({ ...formData, accountId: e.target.value })}
                 required
               >
+                {accounts.length === 0 && <option value="">Select Account (None available)</option>}
                 {accounts.map(a => (
                   <option key={a.id} value={a.id}>{a.name}</option>
                 ))}
@@ -537,6 +543,7 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
                         onChange={e => handleUpdateSubTransaction(idx, { accountId: e.target.value })}
                         required
                       >
+                        {accounts.length === 0 && <option value="">Select Account (None available)</option>}
                         {accounts.map(a => (
                           <option key={a.id} value={a.id}>{a.name}</option>
                         ))}
