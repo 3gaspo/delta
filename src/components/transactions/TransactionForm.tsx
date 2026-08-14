@@ -4,24 +4,26 @@ import { Transaction, TransactionType, TransactionStatus, Category } from '../..
 import { Button, Input, Select } from '../ui/Base';
 import { 
   Calendar, Tag, CreditCard, Layers, AlignLeft, 
-  ArrowRightLeft, Repeat, Plus, Trash2, Layers3 
+  ArrowRightLeft, Repeat, Plus, Trash2, Layers3,
+  ArrowUpRight, ArrowDownLeft, Receipt
 } from 'lucide-react';
-import { parseMoney, formatCurrency } from '../../lib/utils';
+import { parseMoney, formatCurrency, cn } from '../../lib/utils';
 
 interface TransactionFormProps {
   onClose: () => void;
   initialData?: Transaction;
 }
 
+type FormTabMode = 'single' | 'group' | 'transfer' | 'subscription';
+
 interface SubTransactionItem {
   id?: string;
   amount: string;
-  type: TransactionType;
+  type: 'expense' | 'income';
   accountId: string;
   categoryId: string;
   tagsInput: string;
   description: string;
-  transferAccountId?: string;
 }
 
 export function TransactionForm({ onClose, initialData }: TransactionFormProps) {
@@ -52,31 +54,56 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
     return [];
   }, [initialData, transactions]);
 
-  const [mode, setMode] = useState<'single' | 'group'>(
-    initialData?.groupId || existingGroupSubtransactions.length > 0 ? 'group' : 'single'
-  );
+  // Determine initial mode based on initialData
+  const initialMode = useMemo<FormTabMode>(() => {
+    if (initialData?.groupId || existingGroupSubtransactions.length > 0) return 'group';
+    if (initialData?.type === 'transfer') return 'transfer';
+    if (initialData?.type === 'subscription' || (initialData?.periodicityDays && initialData.periodicityDays > 0)) {
+      return 'subscription';
+    }
+    return 'single';
+  }, [initialData, existingGroupSubtransactions]);
 
-  // Single transaction state
+  const [mode, setMode] = useState<FormTabMode>(initialMode);
+
+  // Common shared state
   const [formData, setFormData] = useState({
-    amount: initialData?.amount.toString() || '',
+    amount: initialData?.amount ? initialData.amount.toString() : '',
     name: initialData?.name || '',
     date: new Date(initialData?.date || Date.now()).toISOString().split('T')[0],
     accountId: initialData?.accountId || accounts[0]?.id || '',
     categoryId: initialData?.categoryId || availableCategories.find(c => c.label === 'Uncategorized')?.id || availableCategories[0]?.id || '',
     tagIds: initialData?.tagIds || [],
-    type: initialData?.type || 'expense' as TransactionType,
+    type: (initialData?.type === 'income' ? 'income' : 'expense') as 'expense' | 'income',
     status: initialData?.status || 'normal' as TransactionStatus,
     description: initialData?.description || '',
     transferAccountId: initialData?.transferAccountId || accounts.find(a => a.id !== initialData?.accountId)?.id || ''
   });
 
-  const [periodicity, setPeriodicity] = useState<string>(
-    initialData?.periodicityDays && [7, 14, 30, 90, 365].includes(initialData.periodicityDays)
-      ? initialData.periodicityDays.toString()
-      : initialData?.periodicityDays
-      ? 'custom'
-      : '0'
+  // Subscription specific state
+  const [subscriptionType, setSubscriptionType] = useState<'expense' | 'income'>(
+    initialData?.type === 'income' ? 'income' : 'expense'
   );
+
+  const [periodicity, setPeriodicity] = useState<string>(() => {
+    if (initialData?.periodicityDays) {
+      if ([7, 14, 30, 90, 365].includes(initialData.periodicityDays)) {
+        return initialData.periodicityDays.toString();
+      }
+      return 'custom';
+    }
+    return '30'; // Default monthly for subscription tab, '0' handled conditionally
+  });
+
+  const [transferPeriodicity, setTransferPeriodicity] = useState<string>(() => {
+    if (initialData?.type === 'transfer' && initialData.periodicityDays) {
+      if ([7, 14, 30, 90, 365].includes(initialData.periodicityDays)) {
+        return initialData.periodicityDays.toString();
+      }
+      return 'custom';
+    }
+    return '0'; // Default one-time for transfer
+  });
 
   const [customPeriod, setCustomPeriod] = useState<string>(
     initialData?.periodicityDays && ![0, 7, 14, 30, 90, 365].includes(initialData.periodicityDays)
@@ -97,12 +124,11 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
       return existingGroupSubtransactions.map(t => ({
         id: t.id,
         amount: t.amount.toString(),
-        type: t.type,
+        type: (t.type === 'income' ? 'income' : 'expense'),
         accountId: t.accountId,
         categoryId: t.categoryId || defaultSubCat,
         tagsInput: t.tagIds.map(tid => tags.find(tg => tg.id === tid)?.label).filter(Boolean).join(', '),
-        description: t.description || '',
-        transferAccountId: t.transferAccountId || ''
+        description: t.description || ''
       }));
     }
     return [
@@ -163,29 +189,31 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
     setError(null);
 
     try {
-      if (!formData.name.trim()) throw new Error('Shared transaction name is required');
+      if (accounts.length === 0) {
+        throw new Error('Please create at least one account first.');
+      }
 
       if (mode === 'single') {
+        if (!formData.name.trim()) throw new Error('Transaction name is required');
         const amount = parseMoney(formData.amount);
         if (amount <= 0) throw new Error('Amount must be positive');
         if (!formData.accountId) throw new Error('Account is required');
-        if (formData.type === 'transfer' && !formData.transferAccountId) throw new Error('Transfer account is required');
-        if (formData.type === 'transfer' && formData.accountId === formData.transferAccountId) {
-          throw new Error('Source and destination accounts must be different');
-        }
 
         const finalTagIds = await processTags(tagsInput);
 
-        const periodNum = periodicity === 'custom' ? parseInt(customPeriod) : parseInt(periodicity);
-        const periodicityDays = (!isNaN(periodNum) && periodNum > 0) ? periodNum : undefined;
-
         const submission: any = {
-          ...formData,
+          name: formData.name.trim(),
           amount,
           date: new Date(formData.date).getTime(),
+          accountId: formData.accountId,
+          categoryId: formData.categoryId,
           tagIds: finalTagIds,
-          periodicityDays,
-          lastGeneratedDate: periodicityDays ? (initialData?.lastGeneratedDate || new Date(formData.date).getTime()) : undefined
+          type: formData.type,
+          status: formData.status,
+          description: formData.description.trim(),
+          periodicityDays: undefined,
+          lastGeneratedDate: undefined,
+          transferAccountId: undefined
         };
 
         if (initialData) {
@@ -193,8 +221,8 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
         } else {
           await addTransaction(submission);
         }
-      } else {
-        // Group Mode
+      } else if (mode === 'group') {
+        if (!formData.name.trim()) throw new Error('Group title is required');
         if (subTransactions.length === 0) throw new Error('At least one sub-transaction is required');
 
         const sharedDate = new Date(formData.date).getTime();
@@ -206,7 +234,6 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
           const amt = parseMoney(st.amount);
           if (amt <= 0) throw new Error(`Sub-transaction #${i + 1} has an invalid amount`);
           if (!st.accountId) throw new Error(`Sub-transaction #${i + 1} requires an account`);
-          if (st.type === 'transfer' && !st.transferAccountId) throw new Error(`Sub-transaction #${i + 1} requires a destination account`);
 
           const stTagIds = await processTags(st.tagsInput);
 
@@ -217,16 +244,82 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
             amount: amt,
             date: sharedDate,
             accountId: st.accountId,
-            categoryId: st.type === 'transfer' ? '' : st.categoryId,
+            categoryId: st.categoryId,
             tagIds: stTagIds,
             type: st.type,
             status: formData.status,
-            description: st.description.trim(),
-            transferAccountId: st.type === 'transfer' ? st.transferAccountId : undefined
+            description: st.description.trim()
           });
         }
 
         await saveGroupTransaction(groupId, preparedSubtransactions);
+      } else if (mode === 'transfer') {
+        const transferName = formData.name.trim() || 'Transfer';
+        const amount = parseMoney(formData.amount);
+        if (amount <= 0) throw new Error('Transfer amount must be positive');
+        if (!formData.accountId) throw new Error('Source (From) account is required');
+        if (!formData.transferAccountId) throw new Error('Destination (To) account is required');
+        if (formData.accountId === formData.transferAccountId) {
+          throw new Error('Source and destination accounts must be different');
+        }
+
+        const periodNum = transferPeriodicity === 'custom' ? parseInt(customPeriod) : parseInt(transferPeriodicity);
+        const periodicityDays = (!isNaN(periodNum) && periodNum > 0) ? periodNum : undefined;
+        const finalTagIds = await processTags(tagsInput);
+
+        const submission: any = {
+          name: transferName,
+          amount,
+          date: new Date(formData.date).getTime(),
+          accountId: formData.accountId,
+          transferAccountId: formData.transferAccountId,
+          categoryId: '',
+          tagIds: finalTagIds,
+          type: 'transfer' as TransactionType,
+          status: formData.status,
+          description: formData.description.trim(),
+          periodicityDays,
+          lastGeneratedDate: periodicityDays ? (initialData?.lastGeneratedDate || new Date(formData.date).getTime()) : undefined
+        };
+
+        if (initialData) {
+          await updateTransaction(initialData.id, submission);
+        } else {
+          await addTransaction(submission);
+        }
+      } else if (mode === 'subscription') {
+        if (!formData.name.trim()) throw new Error('Subscription name is required');
+        const amount = parseMoney(formData.amount);
+        if (amount <= 0) throw new Error('Subscription amount must be positive');
+        if (!formData.accountId) throw new Error('Account is required');
+
+        const periodNum = periodicity === 'custom' ? parseInt(customPeriod) : parseInt(periodicity);
+        if (isNaN(periodNum) || periodNum <= 0) {
+          throw new Error('Please select a valid periodicity interval for the recurring subscription');
+        }
+
+        const finalTagIds = await processTags(tagsInput);
+
+        const submission: any = {
+          name: formData.name.trim(),
+          amount,
+          date: new Date(formData.date).getTime(),
+          accountId: formData.accountId,
+          categoryId: formData.categoryId,
+          tagIds: finalTagIds,
+          type: subscriptionType === 'income' ? 'income' : 'subscription',
+          status: formData.status,
+          description: formData.description.trim(),
+          periodicityDays: periodNum,
+          lastGeneratedDate: initialData?.lastGeneratedDate || new Date(formData.date).getTime(),
+          transferAccountId: undefined
+        };
+
+        if (initialData) {
+          await updateTransaction(initialData.id, submission);
+        } else {
+          await addTransaction(submission);
+        }
       }
 
       onClose();
@@ -239,58 +332,190 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {error && <p className="text-red-500 text-sm font-medium">{error}</p>}
+      {error && (
+        <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-2xl text-xs font-semibold">
+          {error}
+        </div>
+      )}
+
       {accounts.length === 0 && (
-        <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl text-xs font-semibold">
+        <div className="p-3 bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-2xl text-xs font-semibold">
           No accounts found. Please add an account in the Accounts tab before recording transactions.
         </div>
       )}
 
-      {/* Mode Selector Toggle */}
-      <div className="flex bg-black/5 dark:bg-white/5 p-1 rounded-2xl gap-1">
+      {/* 4-Tab Mode Selector (Icon-only bar with generous click targets and titles) */}
+      <div className="grid grid-cols-4 bg-black/5 dark:bg-white/5 p-1.5 rounded-2xl gap-1.5" role="tablist">
         <button
           type="button"
+          role="tab"
+          aria-selected={mode === 'single'}
+          title="Single Transaction"
           onClick={() => setMode('single')}
-          className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xl transition-all ${
+          className={cn(
+            "py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
             mode === 'single'
-              ? 'bg-white dark:bg-black text-black dark:text-white shadow-sm'
-              : 'opacity-50 hover:opacity-100'
-          }`}
+              ? "bg-white dark:bg-black text-foreground shadow-sm ring-1 ring-black/5 dark:ring-white/10"
+              : "opacity-40 hover:opacity-100 text-foreground"
+          )}
         >
-          Single Transaction
+          <Receipt size={18} />
         </button>
+
         <button
           type="button"
+          role="tab"
+          aria-selected={mode === 'group'}
+          title="Group Transaction"
           onClick={() => setMode('group')}
-          className={`flex-1 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xl transition-all flex items-center justify-center gap-2 ${
+          className={cn(
+            "py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
             mode === 'group'
-              ? 'bg-purple-600 text-white shadow-sm'
-              : 'opacity-50 hover:opacity-100'
-          }`}
+              ? "bg-purple-600 text-white shadow-sm"
+              : "opacity-40 hover:opacity-100 text-foreground"
+          )}
         >
-          <Layers3 size={14} /> Group Transaction
+          <Layers3 size={18} />
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'transfer'}
+          title="Account Transfer"
+          onClick={() => setMode('transfer')}
+          className={cn(
+            "py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
+            mode === 'transfer'
+              ? "bg-blue-600 text-white shadow-sm"
+              : "opacity-40 hover:opacity-100 text-foreground"
+          )}
+        >
+          <ArrowRightLeft size={18} />
+        </button>
+
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'subscription'}
+          title="Recurring Subscription"
+          onClick={() => setMode('subscription')}
+          className={cn(
+            "py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
+            mode === 'subscription'
+              ? "bg-amber-600 text-white shadow-sm"
+              : "opacity-40 hover:opacity-100 text-foreground"
+          )}
+        >
+          <Repeat size={18} />
         </button>
       </div>
 
-      <div className="space-y-4">
-        {/* Title / Name (Shared) */}
-        <label className="block">
-          <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
-            {mode === 'group' ? 'Group Title / Shared Name' : 'Name'}
-          </span>
-          <Input 
-            placeholder={mode === 'group' ? "e.g. IKEA Shopping, Supermarket Receipt" : "e.g. Starbucks Coffee"} 
-            icon={AlignLeft}
-            value={formData.name}
-            onChange={e => setFormData({ ...formData, name: e.target.value })}
-            required
-            className="text-lg font-bold"
-          />
-        </label>
+      {/* Active Tab Banner Title & Description */}
+      {mode === 'single' && (
+        <div className="flex items-center gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-2xl">
+          <div className="w-9 h-9 rounded-xl bg-white dark:bg-black/40 flex items-center justify-center shadow-xs shrink-0 text-foreground">
+            <Receipt size={18} />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-foreground">Single Transaction</h3>
+            <p className="text-xs text-foreground/50">Record a standard one-time expense or income</p>
+          </div>
+        </div>
+      )}
 
-        {/* Single Mode Fields */}
+      {mode === 'group' && (
+        <div className="flex items-center gap-3 p-3 bg-purple-500/10 rounded-2xl border border-purple-500/20">
+          <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs shrink-0">
+            <Layers3 size={18} />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-purple-700 dark:text-purple-300">Group Transaction</h3>
+            <p className="text-xs text-purple-600/70 dark:text-purple-400/70">Split a single bill or purchase across multiple items</p>
+          </div>
+        </div>
+      )}
+
+      {mode === 'transfer' && (
+        <div className="flex items-center gap-3 p-3 bg-blue-500/10 rounded-2xl border border-blue-500/20">
+          <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
+            <ArrowRightLeft size={18} />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-blue-700 dark:text-blue-300">Account Transfer</h3>
+            <p className="text-xs text-blue-600/70 dark:text-blue-400/70">Move funds between two accounts with optional repeat</p>
+          </div>
+        </div>
+      )}
+
+      {mode === 'subscription' && (
+        <div className="flex items-center gap-3 p-3 bg-amber-500/10 rounded-2xl border border-amber-500/20">
+          <div className="w-9 h-9 rounded-xl bg-amber-600 text-white flex items-center justify-center shadow-xs shrink-0">
+            <Repeat size={18} />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-amber-700 dark:text-amber-300">Recurring Subscription</h3>
+            <p className="text-xs text-amber-600/70 dark:text-amber-400/70">Automated recurring expenses or incoming salary/retainers</p>
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        {/* ======================= TAB 1: SINGLE TRANSACTION ======================= */}
         {mode === 'single' && (
           <>
+            {/* Type Selector (Expense in Red / Income in Green) */}
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
+                Transaction Type
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, type: 'expense' })}
+                  className={cn(
+                    "py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border transition-all",
+                    formData.type === 'expense'
+                      ? "bg-red-500/15 border-red-500 text-red-600 dark:text-red-400 shadow-sm"
+                      : "bg-black/5 dark:bg-white/5 border-transparent text-foreground/50 hover:text-foreground"
+                  )}
+                >
+                  <ArrowUpRight size={16} className={formData.type === 'expense' ? "text-red-500" : ""} />
+                  <span>Expense</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, type: 'income' })}
+                  className={cn(
+                    "py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border transition-all",
+                    formData.type === 'income'
+                      ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-sm"
+                      : "bg-black/5 dark:bg-white/5 border-transparent text-foreground/50 hover:text-foreground"
+                  )}
+                >
+                  <ArrowDownLeft size={16} className={formData.type === 'income' ? "text-emerald-500" : ""} />
+                  <span>Income</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Name */}
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
+                Name / Merchant
+              </span>
+              <Input 
+                placeholder={formData.type === 'income' ? "e.g. Bonus, Client Payment" : "e.g. Starbucks, Groceries"} 
+                icon={AlignLeft}
+                value={formData.name}
+                onChange={e => setFormData({ ...formData, name: e.target.value })}
+                required
+                className="text-lg font-bold"
+              />
+            </label>
+
+            {/* Amount */}
             <label className="block">
               <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Amount</span>
               <Input 
@@ -299,23 +524,25 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
                 value={formData.amount}
                 onChange={e => setFormData({ ...formData, amount: e.target.value })}
                 required
-                className="text-2xl font-bold py-6"
+                className={cn(
+                  "text-2xl font-bold py-6",
+                  formData.type === 'income' ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+                )}
               />
             </label>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Type</span>
-                <Select 
-                  value={formData.type}
-                  onChange={e => setFormData({ ...formData, type: e.target.value as TransactionType })}
-                >
-                  <option value="expense">Expense</option>
-                  <option value="income">Income</option>
-                  <option value="transfer">Transfer</option>
-                  <option value="subscription">Subscription</option>
-                </Select>
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Date</span>
+                <Input 
+                  type="date" 
+                  icon={Calendar}
+                  value={formData.date}
+                  onChange={e => setFormData({ ...formData, date: e.target.value })}
+                  required
+                />
               </label>
+
               <label className="block">
                 <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Status</span>
                 <Select 
@@ -331,86 +558,20 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Date</span>
-                <Input 
-                  type="date" 
-                  icon={Calendar}
-                  value={formData.date}
-                  onChange={e => setFormData({ ...formData, date: e.target.value })}
-                  required
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Periodicity</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Account</span>
                 <Select 
-                  icon={Repeat}
-                  value={periodicity}
-                  onChange={e => setPeriodicity(e.target.value)}
-                >
-                  <option value="0">One-time (No repeat)</option>
-                  <option value="7">Every 7 days (Weekly)</option>
-                  <option value="14">Every 14 days (Bi-weekly)</option>
-                  <option value="30">Every 30 days (Monthly)</option>
-                  <option value="90">Every 90 days (Quarterly)</option>
-                  <option value="365">Every 365 days (Yearly)</option>
-                  <option value="custom">Custom interval in days...</option>
-                </Select>
-              </label>
-            </div>
-
-            {periodicity === 'custom' && (
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Repeat Every (Days)</span>
-                <Input 
-                  type="number"
-                  icon={Repeat}
-                  placeholder="e.g. 15"
-                  value={customPeriod}
-                  onChange={e => setCustomPeriod(e.target.value)}
-                  min="1"
-                  required
-                />
-              </label>
-            )}
-
-            <label className="block">
-              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
-                {formData.type === 'transfer' ? 'From Account' : 'Account'}
-              </span>
-              <Select 
-                icon={CreditCard}
-                value={formData.accountId}
-                onChange={e => setFormData({ ...formData, accountId: e.target.value })}
-                required
-              >
-                {accounts.length === 0 && <option value="">Select Account (None available)</option>}
-                {accounts.map(a => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
-                ))}
-              </Select>
-            </label>
-
-            {formData.type === 'transfer' && (
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">To Account</span>
-                <Select 
-                  icon={ArrowRightLeft}
-                  value={formData.transferAccountId}
-                  onChange={e => setFormData({ ...formData, transferAccountId: e.target.value })}
+                  icon={CreditCard}
+                  value={formData.accountId}
+                  onChange={e => setFormData({ ...formData, accountId: e.target.value })}
                   required
                 >
-                  <option value="">Select Destination</option>
+                  {accounts.length === 0 && <option value="">No Accounts Available</option>}
                   {accounts.map(a => (
-                    <option key={a.id} value={a.id} disabled={a.id === formData.accountId}>
-                      {a.name}
-                    </option>
+                    <option key={a.id} value={a.id}>{a.name}</option>
                   ))}
                 </Select>
               </label>
-            )}
 
-            {formData.type !== 'transfer' && (
               <label className="block">
                 <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Category</span>
                 <Select 
@@ -420,19 +581,19 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
                   required
                 >
                   {availableCategories
-                    .filter(c => (c.type === 'both' || c.type === (formData.type === 'subscription' ? 'expense' : formData.type)))
+                    .filter(c => (c.type === 'both' || c.type === formData.type))
                     .map(c => (
                       <option key={c.id} value={c.id}>{c.label}</option>
                     ))}
                 </Select>
               </label>
-            )}
+            </div>
 
             <label className="block">
               <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Tags (comma separated)</span>
               <Input 
                 icon={Tag}
-                placeholder="Food, Leisure, Urgent..."
+                placeholder="Food, Leisure, Important..."
                 value={tagsInput}
                 onChange={e => setTagsInput(e.target.value)}
               />
@@ -450,9 +611,23 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
           </>
         )}
 
-        {/* Group Mode Fields */}
+        {/* ======================= TAB 2: GROUP TRANSACTION ======================= */}
         {mode === 'group' && (
           <>
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
+                Group Title / Shared Name
+              </span>
+              <Input 
+                placeholder="e.g. IKEA Shopping, Supermarket Receipt" 
+                icon={AlignLeft}
+                value={formData.name}
+                onChange={e => setFormData({ ...formData, name: e.target.value })}
+                required
+                className="text-lg font-bold"
+              />
+            </label>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="block">
                 <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Date</span>
@@ -507,35 +682,57 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <label className="block">
-                        <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Amount</span>
-                        <Input 
-                          placeholder="0.00"
-                          value={st.amount}
-                          onChange={e => handleUpdateSubTransaction(idx, { amount: e.target.value })}
-                          required
-                          className="font-bold"
-                        />
-                      </label>
-
-                      <label className="block">
-                        <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Type</span>
-                        <Select
-                          value={st.type}
-                          onChange={e => handleUpdateSubTransaction(idx, { type: e.target.value as TransactionType })}
+                    {/* Subtransaction Type Selector: Expense (Red) / Income (Green) */}
+                    <div>
+                      <span className="text-[9px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Type</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateSubTransaction(idx, { type: 'expense' })}
+                          className={cn(
+                            "py-2 px-3 rounded-xl font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 border transition-all",
+                            st.type === 'expense'
+                              ? "bg-red-500/15 border-red-500 text-red-600 dark:text-red-400 shadow-sm"
+                              : "bg-black/5 dark:bg-white/5 border-transparent text-foreground/50 hover:text-foreground"
+                          )}
                         >
-                          <option value="expense">Expense</option>
-                          <option value="income">Income</option>
-                          <option value="transfer">Transfer</option>
-                          <option value="subscription">Subscription</option>
-                        </Select>
-                      </label>
+                          <ArrowUpRight size={14} className={st.type === 'expense' ? "text-red-500" : ""} />
+                          <span>Expense</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateSubTransaction(idx, { type: 'income' })}
+                          className={cn(
+                            "py-2 px-3 rounded-xl font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 border transition-all",
+                            st.type === 'income'
+                              ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-sm"
+                              : "bg-black/5 dark:bg-white/5 border-transparent text-foreground/50 hover:text-foreground"
+                          )}
+                        >
+                          <ArrowDownLeft size={14} className={st.type === 'income' ? "text-emerald-500" : ""} />
+                          <span>Income</span>
+                        </button>
+                      </div>
                     </div>
 
                     <label className="block">
+                      <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Amount</span>
+                      <Input 
+                        placeholder="0.00"
+                        value={st.amount}
+                        onChange={e => handleUpdateSubTransaction(idx, { amount: e.target.value })}
+                        required
+                        className={cn(
+                          "font-bold",
+                          st.type === 'income' ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
+                        )}
+                      />
+                    </label>
+
+                    <label className="block">
                       <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">
-                        {st.type === 'transfer' ? 'From Account' : 'Account'}
+                        Account
                       </span>
                       <Select
                         icon={CreditCard}
@@ -543,47 +740,28 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
                         onChange={e => handleUpdateSubTransaction(idx, { accountId: e.target.value })}
                         required
                       >
-                        {accounts.length === 0 && <option value="">Select Account (None available)</option>}
+                        {accounts.length === 0 && <option value="">No Accounts Available</option>}
                         {accounts.map(a => (
                           <option key={a.id} value={a.id}>{a.name}</option>
                         ))}
                       </Select>
                     </label>
 
-                    {st.type === 'transfer' ? (
-                      <label className="block">
-                        <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">To Account</span>
-                        <Select 
-                          icon={ArrowRightLeft}
-                          value={st.transferAccountId || ''}
-                          onChange={e => handleUpdateSubTransaction(idx, { transferAccountId: e.target.value })}
-                          required
-                        >
-                          <option value="">Select Destination</option>
-                          {accounts.map(a => (
-                            <option key={a.id} value={a.id} disabled={a.id === st.accountId}>
-                              {a.name}
-                            </option>
+                    <label className="block">
+                      <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Category</span>
+                      <Select
+                        icon={Layers}
+                        value={st.categoryId}
+                        onChange={e => handleUpdateSubTransaction(idx, { categoryId: e.target.value })}
+                        required
+                      >
+                        {availableCategories
+                          .filter(c => (c.type === 'both' || c.type === st.type))
+                          .map(c => (
+                            <option key={c.id} value={c.id}>{c.label}</option>
                           ))}
-                        </Select>
-                      </label>
-                    ) : (
-                      <label className="block">
-                        <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Category</span>
-                        <Select
-                          icon={Layers}
-                          value={st.categoryId}
-                          onChange={e => handleUpdateSubTransaction(idx, { categoryId: e.target.value })}
-                          required
-                        >
-                          {availableCategories
-                            .filter(c => (c.type === 'both' || c.type === (st.type === 'subscription' ? 'expense' : st.type)))
-                            .map(c => (
-                              <option key={c.id} value={c.id}>{c.label}</option>
-                            ))}
-                        </Select>
-                      </label>
-                    )}
+                      </Select>
+                    </label>
 
                     <label className="block">
                       <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Tags (comma separated)</span>
@@ -619,10 +797,343 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
             </div>
           </>
         )}
+
+        {/* ======================= TAB 3: TRANSFER ======================= */}
+        {mode === 'transfer' && (
+          <>
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
+                Transfer Title / Name
+              </span>
+              <Input 
+                placeholder="e.g. Savings Deposit, Credit Card Payment" 
+                icon={AlignLeft}
+                value={formData.name}
+                onChange={e => setFormData({ ...formData, name: e.target.value })}
+                required
+                className="text-lg font-bold"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Transfer Amount</span>
+              <Input 
+                placeholder="0.00" 
+                type="text" 
+                value={formData.amount}
+                onChange={e => setFormData({ ...formData, amount: e.target.value })}
+                required
+                className="text-2xl font-bold py-6 text-blue-600 dark:text-blue-400"
+              />
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">From Account (Source)</span>
+                <Select 
+                  icon={CreditCard}
+                  value={formData.accountId}
+                  onChange={e => setFormData({ ...formData, accountId: e.target.value })}
+                  required
+                >
+                  {accounts.length === 0 && <option value="">No Accounts Available</option>}
+                  {accounts.map(a => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </Select>
+              </label>
+
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">To Account (Destination)</span>
+                <Select 
+                  icon={ArrowRightLeft}
+                  value={formData.transferAccountId}
+                  onChange={e => setFormData({ ...formData, transferAccountId: e.target.value })}
+                  required
+                >
+                  <option value="">Select Destination</option>
+                  {accounts.map(a => (
+                    <option key={a.id} value={a.id} disabled={a.id === formData.accountId}>
+                      {a.name} {a.id === formData.accountId ? '(Current Source)' : ''}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Start Date</span>
+                <Input 
+                  type="date" 
+                  icon={Calendar}
+                  value={formData.date}
+                  onChange={e => setFormData({ ...formData, date: e.target.value })}
+                  required
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Optional Periodicity</span>
+                <Select 
+                  icon={Repeat}
+                  value={transferPeriodicity}
+                  onChange={e => setTransferPeriodicity(e.target.value)}
+                >
+                  <option value="0">One-time (No repeat)</option>
+                  <option value="7">Every 7 days (Weekly)</option>
+                  <option value="14">Every 14 days (Bi-weekly)</option>
+                  <option value="30">Every 30 days (Monthly)</option>
+                  <option value="90">Every 90 days (Quarterly)</option>
+                  <option value="365">Every 365 days (Yearly)</option>
+                  <option value="custom">Custom interval in days...</option>
+                </Select>
+              </label>
+            </div>
+
+            {transferPeriodicity === 'custom' && (
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Repeat Every (Days)</span>
+                <Input 
+                  type="number"
+                  icon={Repeat}
+                  placeholder="e.g. 15"
+                  value={customPeriod}
+                  onChange={e => setCustomPeriod(e.target.value)}
+                  min="1"
+                  required
+                />
+              </label>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Status</span>
+                <Select 
+                  value={formData.status}
+                  onChange={e => setFormData({ ...formData, status: e.target.value as TransactionStatus })}
+                >
+                  <option value="normal">Normal</option>
+                  <option value="pending">Pending</option>
+                  <option value="hidden">Hidden</option>
+                </Select>
+              </label>
+
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Tags (comma separated)</span>
+                <Input 
+                  icon={Tag}
+                  placeholder="Savings, Transfer, Internal..."
+                  value={tagsInput}
+                  onChange={e => setTagsInput(e.target.value)}
+                />
+              </label>
+            </div>
+
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Notes / Description (Optional)</span>
+              <Input 
+                icon={AlignLeft}
+                placeholder="Details about this transfer..."
+                value={formData.description}
+                onChange={e => setFormData({ ...formData, description: e.target.value })}
+              />
+            </label>
+          </>
+        )}
+
+        {/* ======================= TAB 4: SUBSCRIPTION ======================= */}
+        {mode === 'subscription' && (
+          <>
+            {/* Recurring Type Selector: Expense (Subscription) vs Recurring Income */}
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
+                Subscription Flow
+              </span>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSubscriptionType('expense')}
+                  className={cn(
+                    "py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border transition-all",
+                    subscriptionType === 'expense'
+                      ? "bg-red-500/15 border-red-500 text-red-600 dark:text-red-400 shadow-sm"
+                      : "bg-black/5 dark:bg-white/5 border-transparent text-foreground/50 hover:text-foreground"
+                  )}
+                >
+                  <ArrowUpRight size={16} className={subscriptionType === 'expense' ? "text-red-500" : ""} />
+                  <span>Recurring Expense</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSubscriptionType('income')}
+                  className={cn(
+                    "py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border transition-all",
+                    subscriptionType === 'income'
+                      ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-sm"
+                      : "bg-black/5 dark:bg-white/5 border-transparent text-foreground/50 hover:text-foreground"
+                  )}
+                >
+                  <ArrowDownLeft size={16} className={subscriptionType === 'income' ? "text-emerald-500" : ""} />
+                  <span>Recurring Income</span>
+                </button>
+              </div>
+            </div>
+
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
+                {subscriptionType === 'expense' ? 'Subscription / Recurring Expense Name' : 'Recurring Income Name'}
+              </span>
+              <Input 
+                placeholder={subscriptionType === 'expense' ? "e.g. Netflix, Spotify, Gym, Apartment Rent" : "e.g. Monthly Salary, Freelance Retainer"} 
+                icon={AlignLeft}
+                value={formData.name}
+                onChange={e => setFormData({ ...formData, name: e.target.value })}
+                required
+                className="text-lg font-bold"
+              />
+            </label>
+
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Recurring Amount</span>
+              <Input 
+                placeholder="0.00" 
+                type="text" 
+                value={formData.amount}
+                onChange={e => setFormData({ ...formData, amount: e.target.value })}
+                required
+                className={cn(
+                  "text-2xl font-bold py-6",
+                  subscriptionType === 'income' ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"
+                )}
+              />
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Periodicity Interval</span>
+                <Select 
+                  icon={Repeat}
+                  value={periodicity}
+                  onChange={e => setPeriodicity(e.target.value)}
+                >
+                  <option value="7">Every 7 days (Weekly)</option>
+                  <option value="14">Every 14 days (Bi-weekly)</option>
+                  <option value="30">Every 30 days (Monthly)</option>
+                  <option value="90">Every 90 days (Quarterly)</option>
+                  <option value="365">Every 365 days (Yearly)</option>
+                  <option value="custom">Custom interval in days...</option>
+                </Select>
+              </label>
+
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Start Date (First Occurrence)</span>
+                <Input 
+                  type="date" 
+                  icon={Calendar}
+                  value={formData.date}
+                  onChange={e => setFormData({ ...formData, date: e.target.value })}
+                  required
+                />
+              </label>
+            </div>
+
+            {periodicity === 'custom' && (
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Repeat Every (Days)</span>
+                <Input 
+                  type="number"
+                  icon={Repeat}
+                  placeholder="e.g. 15"
+                  value={customPeriod}
+                  onChange={e => setCustomPeriod(e.target.value)}
+                  min="1"
+                  required
+                />
+              </label>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Account</span>
+                <Select 
+                  icon={CreditCard}
+                  value={formData.accountId}
+                  onChange={e => setFormData({ ...formData, accountId: e.target.value })}
+                  required
+                >
+                  {accounts.length === 0 && <option value="">No Accounts Available</option>}
+                  {accounts.map(a => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </Select>
+              </label>
+
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Category</span>
+                <Select 
+                  icon={Layers}
+                  value={formData.categoryId}
+                  onChange={e => setFormData({ ...formData, categoryId: e.target.value })}
+                  required
+                >
+                  {availableCategories
+                    .filter(c => (c.type === 'both' || c.type === subscriptionType))
+                    .map(c => (
+                      <option key={c.id} value={c.id}>{c.label}</option>
+                    ))}
+                </Select>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Status</span>
+                <Select 
+                  value={formData.status}
+                  onChange={e => setFormData({ ...formData, status: e.target.value as TransactionStatus })}
+                >
+                  <option value="normal">Normal</option>
+                  <option value="pending">Pending</option>
+                  <option value="hidden">Hidden</option>
+                </Select>
+              </label>
+
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Tags (comma separated)</span>
+                <Input 
+                  icon={Tag}
+                  placeholder="Subscription, Fixed, Essential..."
+                  value={tagsInput}
+                  onChange={e => setTagsInput(e.target.value)}
+                />
+              </label>
+            </div>
+
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Additional Description (Optional)</span>
+              <Input 
+                icon={AlignLeft}
+                placeholder="Billing notes, renewal info..."
+                value={formData.description}
+                onChange={e => setFormData({ ...formData, description: e.target.value })}
+              />
+            </label>
+          </>
+        )}
       </div>
 
       <Button type="submit" disabled={loading} className="w-full">
-        {loading ? 'Saving...' : mode === 'group' ? 'Save Group Transaction' : initialData ? 'Update Transaction' : 'Record Transaction'}
+        {loading 
+          ? 'Saving...' 
+          : mode === 'group' 
+            ? 'Save Group Transaction' 
+            : mode === 'transfer'
+              ? (initialData ? 'Update Transfer' : 'Execute Transfer')
+              : mode === 'subscription'
+                ? (initialData ? 'Update Subscription' : 'Create Subscription')
+                : (initialData ? 'Update Transaction' : 'Record Transaction')}
       </Button>
     </form>
   );
