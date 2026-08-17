@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useData } from '../../providers/DataProvider';
-import { Transaction, TransactionType, TransactionStatus, Category } from '../../types';
+import { Transaction, RecurringTransaction, TransactionType, TransactionStatus, Category } from '../../types';
 import { Button, Input, Select } from '../ui/Base';
 import { 
   Calendar, Tag, CreditCard, Layers, AlignLeft, 
@@ -9,12 +9,14 @@ import {
 } from 'lucide-react';
 import { parseMoney, formatCurrency, cn } from '../../lib/utils';
 
+export type FormTabMode = 'single' | 'group' | 'transfer' | 'subscription';
+
 interface TransactionFormProps {
   onClose: () => void;
   initialData?: Transaction;
+  initialRecurringData?: RecurringTransaction;
+  defaultMode?: FormTabMode;
 }
-
-type FormTabMode = 'single' | 'group' | 'transfer' | 'subscription';
 
 interface SubTransactionItem {
   id?: string;
@@ -26,10 +28,11 @@ interface SubTransactionItem {
   description: string;
 }
 
-export function TransactionForm({ onClose, initialData }: TransactionFormProps) {
+export function TransactionForm({ onClose, initialData, initialRecurringData, defaultMode }: TransactionFormProps) {
   const { 
     accounts, categories, tags, transactions, settings,
-    addTransaction, updateTransaction, saveGroupTransaction, addTag 
+    addTransaction, updateTransaction, saveGroupTransaction,
+    addRecurringTransaction, updateRecurringTransaction, addTag 
   } = useData();
 
   // Deduplicate categories by label
@@ -54,51 +57,67 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
     return [];
   }, [initialData, transactions]);
 
-  // Determine initial mode based on initialData
+  // Determine initial mode based on initialData or initialRecurringData
   const initialMode = useMemo<FormTabMode>(() => {
+    if (defaultMode) return defaultMode;
+    if (initialRecurringData) {
+      return initialRecurringData.type === 'transfer' ? 'transfer' : 'subscription';
+    }
     if (initialData?.groupId || existingGroupSubtransactions.length > 0) return 'group';
     if (initialData?.type === 'transfer') return 'transfer';
     if (initialData?.type === 'subscription' || (initialData?.periodicityDays && initialData.periodicityDays > 0)) {
       return 'subscription';
     }
     return 'single';
-  }, [initialData, existingGroupSubtransactions]);
+  }, [defaultMode, initialRecurringData, initialData, existingGroupSubtransactions]);
 
   const [mode, setMode] = useState<FormTabMode>(initialMode);
 
   // Common shared state
+  const rawAmount = initialRecurringData?.amount ?? initialData?.amount;
+  const rawDate = initialRecurringData?.startDate ?? initialData?.date ?? Date.now();
+  const rawAccId = initialRecurringData?.accountId ?? initialData?.accountId ?? accounts[0]?.id ?? '';
+  const rawCatId = initialRecurringData?.categoryId ?? initialData?.categoryId ?? availableCategories.find(c => c.label === 'Uncategorized')?.id ?? availableCategories[0]?.id ?? '';
+  const rawTagIds = initialRecurringData?.tagIds ?? initialData?.tagIds ?? [];
+  const rawName = initialRecurringData?.name ?? initialData?.name ?? '';
+  const rawStatus = initialRecurringData?.status ?? initialData?.status ?? 'normal';
+  const rawDesc = initialRecurringData?.description ?? initialData?.description ?? '';
+  const rawTransferAccId = initialRecurringData?.transferAccountId ?? initialData?.transferAccountId ?? accounts.find(a => a.id !== rawAccId)?.id ?? '';
+
   const [formData, setFormData] = useState({
-    amount: initialData?.amount ? initialData.amount.toString() : '',
-    name: initialData?.name || '',
-    date: new Date(initialData?.date || Date.now()).toISOString().split('T')[0],
-    accountId: initialData?.accountId || accounts[0]?.id || '',
-    categoryId: initialData?.categoryId || availableCategories.find(c => c.label === 'Uncategorized')?.id || availableCategories[0]?.id || '',
-    tagIds: initialData?.tagIds || [],
-    type: (initialData?.type === 'income' ? 'income' : 'expense') as 'expense' | 'income',
-    status: initialData?.status || 'normal' as TransactionStatus,
-    description: initialData?.description || '',
-    transferAccountId: initialData?.transferAccountId || accounts.find(a => a.id !== initialData?.accountId)?.id || ''
+    amount: rawAmount ? rawAmount.toString() : '',
+    name: rawName,
+    date: new Date(rawDate).toISOString().split('T')[0],
+    accountId: rawAccId,
+    categoryId: rawCatId,
+    tagIds: rawTagIds,
+    type: ((initialRecurringData?.type === 'income' || initialData?.type === 'income') ? 'income' : 'expense') as 'expense' | 'income',
+    status: rawStatus as TransactionStatus,
+    description: rawDesc,
+    transferAccountId: rawTransferAccId
   });
 
   // Subscription specific state
   const [subscriptionType, setSubscriptionType] = useState<'expense' | 'income'>(
-    initialData?.type === 'income' ? 'income' : 'expense'
+    (initialRecurringData?.type === 'income' || initialData?.type === 'income') ? 'income' : 'expense'
   );
 
+  const initialP = initialRecurringData?.periodicityDays ?? initialData?.periodicityDays;
+
   const [periodicity, setPeriodicity] = useState<string>(() => {
-    if (initialData?.periodicityDays) {
-      if ([7, 14, 30, 90, 365].includes(initialData.periodicityDays)) {
-        return initialData.periodicityDays.toString();
+    if (initialP) {
+      if ([7, 14, 30, 90, 365].includes(initialP)) {
+        return initialP.toString();
       }
       return 'custom';
     }
-    return '30'; // Default monthly for subscription tab, '0' handled conditionally
+    return '30'; // Default monthly for subscription tab
   });
 
   const [transferPeriodicity, setTransferPeriodicity] = useState<string>(() => {
-    if (initialData?.type === 'transfer' && initialData.periodicityDays) {
-      if ([7, 14, 30, 90, 365].includes(initialData.periodicityDays)) {
-        return initialData.periodicityDays.toString();
+    if ((initialRecurringData?.type === 'transfer' || initialData?.type === 'transfer') && initialP) {
+      if ([7, 14, 30, 90, 365].includes(initialP)) {
+        return initialP.toString();
       }
       return 'custom';
     }
@@ -106,13 +125,13 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
   });
 
   const [customPeriod, setCustomPeriod] = useState<string>(
-    initialData?.periodicityDays && ![0, 7, 14, 30, 90, 365].includes(initialData.periodicityDays)
-      ? initialData.periodicityDays.toString()
+    initialP && ![0, 7, 14, 30, 90, 365].includes(initialP)
+      ? initialP.toString()
       : ''
   );
 
   const [tagsInput, setTagsInput] = useState(
-    initialData?.tagIds.map(tid => tags.find(t => t.id === tid)?.label).filter(Boolean).join(', ') || ''
+    rawTagIds.map(tid => tags.find(t => t.id === tid)?.label).filter(Boolean).join(', ')
   );
 
   // Group transaction sub-transactions state
@@ -264,28 +283,49 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
         }
 
         const periodNum = transferPeriodicity === 'custom' ? parseInt(customPeriod) : parseInt(transferPeriodicity);
-        const periodicityDays = (!isNaN(periodNum) && periodNum > 0) ? periodNum : undefined;
+        const isRecurringTransfer = !isNaN(periodNum) && periodNum > 0;
         const finalTagIds = await processTags(tagsInput);
 
-        const submission: any = {
-          name: transferName,
-          amount,
-          date: new Date(formData.date).getTime(),
-          accountId: formData.accountId,
-          transferAccountId: formData.transferAccountId,
-          categoryId: '',
-          tagIds: finalTagIds,
-          type: 'transfer' as TransactionType,
-          status: formData.status,
-          description: formData.description.trim(),
-          periodicityDays,
-          lastGeneratedDate: periodicityDays ? (initialData?.lastGeneratedDate || new Date(formData.date).getTime()) : undefined
-        };
+        if (isRecurringTransfer) {
+          const recurringTransferDoc = {
+            name: transferName,
+            amount,
+            startDate: new Date(formData.date).getTime(),
+            accountId: formData.accountId,
+            transferAccountId: formData.transferAccountId,
+            categoryId: '',
+            tagIds: finalTagIds,
+            type: 'transfer' as const,
+            status: formData.status,
+            description: formData.description.trim(),
+            periodicityDays: periodNum,
+            active: true
+          };
 
-        if (initialData) {
-          await updateTransaction(initialData.id, submission);
+          if (initialRecurringData) {
+            await updateRecurringTransaction(initialRecurringData.id, recurringTransferDoc);
+          } else {
+            await addRecurringTransaction(recurringTransferDoc);
+          }
         } else {
-          await addTransaction(submission);
+          const submission: any = {
+            name: transferName,
+            amount,
+            date: new Date(formData.date).getTime(),
+            accountId: formData.accountId,
+            transferAccountId: formData.transferAccountId,
+            categoryId: '',
+            tagIds: finalTagIds,
+            type: 'transfer' as TransactionType,
+            status: formData.status,
+            description: formData.description.trim()
+          };
+
+          if (initialData) {
+            await updateTransaction(initialData.id, submission);
+          } else {
+            await addTransaction(submission);
+          }
         }
       } else if (mode === 'subscription') {
         if (!formData.name.trim()) throw new Error('Subscription name is required');
@@ -300,25 +340,24 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
 
         const finalTagIds = await processTags(tagsInput);
 
-        const submission: any = {
+        const recurringDoc = {
           name: formData.name.trim(),
           amount,
-          date: new Date(formData.date).getTime(),
+          startDate: new Date(formData.date).getTime(),
           accountId: formData.accountId,
           categoryId: formData.categoryId,
           tagIds: finalTagIds,
-          type: subscriptionType === 'income' ? 'income' : 'subscription',
+          type: subscriptionType === 'income' ? ('income' as const) : ('expense' as const),
           status: formData.status,
           description: formData.description.trim(),
           periodicityDays: periodNum,
-          lastGeneratedDate: initialData?.lastGeneratedDate || new Date(formData.date).getTime(),
-          transferAccountId: undefined
+          active: true
         };
 
-        if (initialData) {
-          await updateTransaction(initialData.id, submission);
+        if (initialRecurringData) {
+          await updateRecurringTransaction(initialRecurringData.id, recurringDoc);
         } else {
-          await addTransaction(submission);
+          await addRecurringTransaction(recurringDoc);
         }
       }
 
@@ -411,16 +450,13 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
         </button>
       </div>
 
-      {/* Active Tab Banner Title & Description */}
+      {/* Active Tab Banner Title (No description as requested) */}
       {mode === 'single' && (
         <div className="flex items-center gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-2xl">
           <div className="w-9 h-9 rounded-xl bg-white dark:bg-black/40 flex items-center justify-center shadow-xs shrink-0 text-foreground">
             <Receipt size={18} />
           </div>
-          <div>
-            <h3 className="text-sm font-bold text-foreground">Single Transaction</h3>
-            <p className="text-xs text-foreground/50">Record a standard one-time expense or income</p>
-          </div>
+          <h3 className="text-sm font-bold text-foreground">Single Transaction</h3>
         </div>
       )}
 
@@ -429,10 +465,7 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
           <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs shrink-0">
             <Layers3 size={18} />
           </div>
-          <div>
-            <h3 className="text-sm font-bold text-purple-700 dark:text-purple-300">Group Transaction</h3>
-            <p className="text-xs text-purple-600/70 dark:text-purple-400/70">Split a single bill or purchase across multiple items</p>
-          </div>
+          <h3 className="text-sm font-bold text-purple-700 dark:text-purple-300">Group Transaction</h3>
         </div>
       )}
 
@@ -441,10 +474,7 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
           <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
             <ArrowRightLeft size={18} />
           </div>
-          <div>
-            <h3 className="text-sm font-bold text-blue-700 dark:text-blue-300">Account Transfer</h3>
-            <p className="text-xs text-blue-600/70 dark:text-blue-400/70">Move funds between two accounts with optional repeat</p>
-          </div>
+          <h3 className="text-sm font-bold text-blue-700 dark:text-blue-300">Account Transfer</h3>
         </div>
       )}
 
@@ -453,10 +483,7 @@ export function TransactionForm({ onClose, initialData }: TransactionFormProps) 
           <div className="w-9 h-9 rounded-xl bg-amber-600 text-white flex items-center justify-center shadow-xs shrink-0">
             <Repeat size={18} />
           </div>
-          <div>
-            <h3 className="text-sm font-bold text-amber-700 dark:text-amber-300">Recurring Subscription</h3>
-            <p className="text-xs text-amber-600/70 dark:text-amber-400/70">Automated recurring expenses or incoming salary/retainers</p>
-          </div>
+          <h3 className="text-sm font-bold text-amber-700 dark:text-amber-300">Recurring Transaction</h3>
         </div>
       )}
 

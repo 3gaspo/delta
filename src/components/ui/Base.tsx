@@ -49,15 +49,23 @@ interface CardProps {
   children: React.ReactNode;
   className?: string;
   label?: string;
+  actions?: React.ReactNode;
 }
 
-export function Card({ children, className, label }: CardProps) {
+export function Card({ children, className, label, actions }: CardProps) {
   return (
     <section className="bg-black/5 dark:bg-white/5 p-6 rounded-[32px] mb-6 last:mb-0">
-      {label && (
-        <span className="block text-[10px] font-bold uppercase tracking-[0.2em] opacity-40 mb-4 px-2">
-          {label}
-        </span>
+      {(label || actions) && (
+        <div className="flex items-center justify-between mb-4 px-2">
+          {label ? (
+            <span className="block text-[10px] font-bold uppercase tracking-[0.2em] opacity-40">
+              {label}
+            </span>
+          ) : <div />}
+          {actions && (
+            <div>{actions}</div>
+          )}
+        </div>
       )}
       <div className={cn("bg-white dark:bg-black/20 rounded-2xl overflow-hidden shadow-sm", className)}>
         {children}

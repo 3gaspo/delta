@@ -30,12 +30,32 @@ export interface Transaction {
   transferAccountId?: string;
   periodicityDays?: number;
   lastGeneratedDate?: number;
+  recurringId?: string;
   createdAt: number;
   updatedAt: number;
   dedupeKey?: string;
   isCorrection?: boolean;
   isInitialBalance?: boolean;
   groupId?: string;
+}
+
+export interface RecurringTransaction {
+  id: string;
+  name: string;
+  amount: number;
+  startDate: number;
+  periodicityDays: number;
+  accountId: string;
+  transferAccountId?: string;
+  categoryId?: string;
+  tagIds: string[];
+  type: 'expense' | 'income' | 'transfer';
+  status: TransactionStatus;
+  description?: string;
+  lastGeneratedDate?: number;
+  active?: boolean;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface Category {
@@ -72,6 +92,7 @@ export interface User {
 export interface DataContextValue {
   accounts: Account[];
   transactions: Transaction[];
+  recurringTransactions: RecurringTransaction[];
   categories: Category[];
   tags: Tag[];
   settings: UserSettings;
@@ -83,6 +104,10 @@ export interface DataContextValue {
   saveGroupTransaction: (groupId: string, subtransactions: any[]) => Promise<void>;
   deleteGroupTransaction: (groupId: string) => Promise<void>;
   
+  addRecurringTransaction: (r: Omit<RecurringTransaction, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  updateRecurringTransaction: (id: string, r: Partial<RecurringTransaction>) => Promise<void>;
+  deleteRecurringTransaction: (id: string, deleteGeneratedHistory?: boolean) => Promise<void>;
+
   addAccount: (a: Omit<Account, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateAccount: (id: string, a: Partial<Account>) => Promise<void>;
   deleteAccount: (id: string) => Promise<void>;

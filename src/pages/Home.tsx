@@ -2,16 +2,18 @@ import { useState, useMemo } from 'react';
 import { useData } from '../providers/DataProvider';
 import { PageContainer } from '../components/layout/PageContainer';
 import { TransactionList } from '../components/transactions/TransactionList';
+import { RecurringList } from '../components/transactions/RecurringList';
 import { Card, Button, Input, Select } from '../components/ui/Base';
 import { Modal } from '../components/ui/Modal';
-import { TransactionForm } from '../components/transactions/TransactionForm';
-import { Plus, Search, Filter } from 'lucide-react';
+import { TransactionForm, FormTabMode } from '../components/transactions/TransactionForm';
+import { Plus, Search, Repeat } from 'lucide-react';
 import { formatCurrency } from '../lib/utils';
 import { computeFinancialTotals } from '../utils/financial';
 
 export default function Home() {
-  const { transactions, accounts, categories, tags, settings, loading } = useData();
+  const { transactions, recurringTransactions, accounts, categories, tags, settings, loading } = useData();
   const [isAdding, setIsAdding] = useState(false);
+  const [addDefaultMode, setAddDefaultMode] = useState<FormTabMode>('single');
   const [search, setSearch] = useState('');
   const [filters, setFilters] = useState({
     accountId: 'all',
@@ -46,7 +48,12 @@ export default function Home() {
       if (filters.status !== 'all' && t.status !== filters.status) return false;
       return true;
     });
-  }, [transactions, search, filters, categories, accounts]);
+  }, [transactions, search, filters, categories, accounts, hiddenAccountIds]);
+
+  const handleOpenAdd = (mode: FormTabMode = 'single') => {
+    setAddDefaultMode(mode);
+    setIsAdding(true);
+  };
 
   if (loading) return null;
 
@@ -54,9 +61,11 @@ export default function Home() {
     <PageContainer 
       title="Delta" 
       actions={
-        <Button size="icon" onClick={() => setIsAdding(true)}>
-          <Plus size={20} />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="icon" onClick={() => handleOpenAdd('single')} title="New Transaction">
+            <Plus size={20} />
+          </Button>
+        </div>
       }
     >
       <div className="space-y-4 mb-8">
@@ -83,17 +92,34 @@ export default function Home() {
             <option value="expense">Expense</option>
             <option value="income">Income</option>
             <option value="transfer">Transfer</option>
-            <option value="subscription">Subscription</option>
           </Select>
         </div>
       </div>
 
-      <Card label="Transaction History">
-        <TransactionList transactions={filteredTransactions} />
-      </Card>
+      <div className="space-y-8">
+        {/* Transaction History Block */}
+        <Card label="Transaction History">
+          <TransactionList transactions={filteredTransactions} />
+        </Card>
+
+        {/* Recurring Transactions Block */}
+        <Card 
+          label="Recurring Transactions"
+          actions={
+            <button
+              onClick={() => handleOpenAdd('subscription')}
+              className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1"
+            >
+              <Plus size={14} /> Add Recurring
+            </button>
+          }
+        >
+          <RecurringList onAddNew={() => handleOpenAdd('subscription')} />
+        </Card>
+      </div>
 
       <Modal isOpen={isAdding} onClose={() => setIsAdding(false)} title="New Transaction">
-        <TransactionForm onClose={() => setIsAdding(false)} />
+        <TransactionForm onClose={() => setIsAdding(false)} defaultMode={addDefaultMode} />
       </Modal>
     </PageContainer>
   );
