@@ -31,8 +31,9 @@ interface SubTransactionItem {
 export function TransactionForm({ onClose, initialData, initialRecurringData, defaultMode }: TransactionFormProps) {
   const { 
     accounts, categories, tags, transactions, settings,
-    addTransaction, updateTransaction, saveGroupTransaction,
-    addRecurringTransaction, updateRecurringTransaction, addTag 
+    addTransaction, updateTransaction, deleteTransaction,
+    saveGroupTransaction, deleteGroupTransaction,
+    addRecurringTransaction, updateRecurringTransaction, deleteRecurringTransaction, addTag 
   } = useData();
 
   // Deduplicate categories by label
@@ -235,7 +236,13 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
           transferAccountId: undefined
         };
 
-        if (initialData) {
+        if (initialRecurringData) {
+          await addTransaction(submission);
+          await deleteRecurringTransaction(initialRecurringData.id, false);
+        } else if (initialData?.groupId) {
+          await deleteGroupTransaction(initialData.groupId);
+          await addTransaction(submission);
+        } else if (initialData) {
           await updateTransaction(initialData.id, submission);
         } else {
           await addTransaction(submission);
@@ -271,7 +278,15 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
           });
         }
 
-        await saveGroupTransaction(groupId, preparedSubtransactions);
+        if (initialRecurringData) {
+          await saveGroupTransaction(groupId, preparedSubtransactions);
+          await deleteRecurringTransaction(initialRecurringData.id, false);
+        } else if (initialData && !initialData.groupId) {
+          await deleteTransaction(initialData.id);
+          await saveGroupTransaction(groupId, preparedSubtransactions);
+        } else {
+          await saveGroupTransaction(groupId, preparedSubtransactions);
+        }
       } else if (mode === 'transfer') {
         const transferName = formData.name.trim() || 'Transfer';
         const amount = parseMoney(formData.amount);
@@ -304,6 +319,12 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
 
           if (initialRecurringData) {
             await updateRecurringTransaction(initialRecurringData.id, recurringTransferDoc);
+          } else if (initialData?.groupId) {
+            await deleteGroupTransaction(initialData.groupId);
+            await addRecurringTransaction(recurringTransferDoc);
+          } else if (initialData) {
+            await deleteTransaction(initialData.id);
+            await addRecurringTransaction(recurringTransferDoc);
           } else {
             await addRecurringTransaction(recurringTransferDoc);
           }
@@ -321,7 +342,13 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             description: formData.description.trim()
           };
 
-          if (initialData) {
+          if (initialRecurringData) {
+            await addTransaction(submission);
+            await deleteRecurringTransaction(initialRecurringData.id, false);
+          } else if (initialData?.groupId) {
+            await deleteGroupTransaction(initialData.groupId);
+            await addTransaction(submission);
+          } else if (initialData) {
             await updateTransaction(initialData.id, submission);
           } else {
             await addTransaction(submission);
@@ -356,6 +383,12 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
 
         if (initialRecurringData) {
           await updateRecurringTransaction(initialRecurringData.id, recurringDoc);
+        } else if (initialData?.groupId) {
+          await deleteGroupTransaction(initialData.groupId);
+          await addRecurringTransaction(recurringDoc);
+        } else if (initialData) {
+          await deleteTransaction(initialData.id);
+          await addRecurringTransaction(recurringDoc);
         } else {
           await addRecurringTransaction(recurringDoc);
         }

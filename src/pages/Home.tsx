@@ -50,6 +50,31 @@ export default function Home() {
     });
   }, [transactions, search, filters, categories, accounts, hiddenAccountIds]);
 
+  const filteredRecurringTransactions = useMemo(() => {
+    return recurringTransactions.filter(r => {
+      if (r.type !== 'transfer' && hiddenAccountIds.has(r.accountId)) {
+        return false;
+      }
+      if (search) {
+        const query = search.toLowerCase();
+        const cat = categories.find(c => c.id === r.categoryId)?.label.toLowerCase() || '';
+        const acc = accounts.find(a => a.id === r.accountId)?.name.toLowerCase() || '';
+        const name = r.name?.toLowerCase() || '';
+        const desc = r.description?.toLowerCase() || '';
+        if (!cat.includes(query) && !acc.includes(query) && !name.includes(query) && !desc.includes(query)) return false;
+      }
+      if (filters.accountId !== 'all' && r.accountId !== filters.accountId && r.transferAccountId !== filters.accountId) return false;
+      if (filters.categoryId !== 'all' && r.categoryId !== filters.categoryId) return false;
+      if (filters.tagId !== 'all' && !r.tagIds.includes(filters.tagId)) return false;
+      if (filters.type !== 'all') {
+        if (filters.type === 'expense' && r.type !== 'expense' && r.type !== 'subscription') return false;
+        if (filters.type === 'income' && r.type !== 'income') return false;
+        if (filters.type === 'transfer' && r.type !== 'transfer') return false;
+      }
+      return true;
+    });
+  }, [recurringTransactions, search, filters, categories, accounts, hiddenAccountIds]);
+
   const handleOpenAdd = (mode: FormTabMode = 'single') => {
     setAddDefaultMode(mode);
     setIsAdding(true);
@@ -114,7 +139,10 @@ export default function Home() {
             </button>
           }
         >
-          <RecurringList onAddNew={() => handleOpenAdd('subscription')} />
+          <RecurringList 
+            recurringTransactions={filteredRecurringTransactions}
+            onAddNew={() => handleOpenAdd('subscription')} 
+          />
         </Card>
       </div>
 

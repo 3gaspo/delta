@@ -11,8 +11,15 @@ import { TransactionForm } from './TransactionForm';
 import { Button } from '../ui/Base';
 import { getNextPeriodDate } from '../../utils/recurring';
 
-export function RecurringList({ onAddNew }: { onAddNew?: () => void }) {
-  const { recurringTransactions, categories, accounts, deleteRecurringTransaction, updateRecurringTransaction, settings } = useData();
+export function RecurringList({ 
+  onAddNew,
+  recurringTransactions: customRecurringTransactions 
+}: { 
+  onAddNew?: () => void;
+  recurringTransactions?: RecurringTransaction[];
+}) {
+  const { recurringTransactions: storeRecurringTransactions, categories, accounts, deleteRecurringTransaction, updateRecurringTransaction, settings } = useData();
+  const recurringTransactions = customRecurringTransactions ?? storeRecurringTransactions;
   const [editingItem, setEditingItem] = useState<RecurringTransaction | null>(null);
   const [deletingItem, setDeletingItem] = useState<RecurringTransaction | null>(null);
 
@@ -45,10 +52,7 @@ export function RecurringList({ onAddNew }: { onAddNew?: () => void }) {
         <div className="w-12 h-12 rounded-2xl bg-black/5 dark:bg-white/5 flex items-center justify-center mx-auto mb-3 text-foreground/40">
           <Repeat size={24} />
         </div>
-        <p className="text-sm font-semibold opacity-60 mb-1">No recurring transactions yet</p>
-        <p className="text-xs opacity-40 mb-4 max-w-xs mx-auto">
-          Subscriptions, recurring salaries, and scheduled transfers will automatically generate transactions on their due dates.
-        </p>
+        <p className="text-sm font-semibold opacity-60 mb-4">No recurring transactions yet</p>
         {onAddNew && (
           <Button variant="outline" size="sm" onClick={onAddNew} className="inline-flex items-center gap-1.5 text-xs">
             <Plus size={14} /> Add Recurring Transaction

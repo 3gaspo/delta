@@ -1,28 +1,34 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { cn } from '../../lib/utils';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, HTMLMotionProps } from 'motion/react';
 import { ChevronDown, Check } from 'lucide-react';
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'destructive' | 'ghost';
+export interface ButtonProps extends Omit<HTMLMotionProps<'button'>, 'size'> {
+  variant?: 'primary' | 'secondary' | 'destructive' | 'danger' | 'ghost' | 'outline';
   size?: 'sm' | 'md' | 'lg' | 'icon';
+  ghost?: boolean;
 }
 
 export function Button({ 
   className, 
   variant = 'primary', 
   size = 'md', 
+  ghost,
   children,
   ...props 
-}: any) {
-  const variants = {
+}: ButtonProps) {
+  const effectiveVariant = ghost ? 'ghost' : (variant === 'danger' ? 'destructive' : variant);
+
+  const variants: Record<string, string> = {
     primary: "bg-black text-white dark:bg-white dark:text-black",
     secondary: "bg-black/5 text-black dark:bg-white/5 dark:text-white",
-    destructive: "bg-red-500 text-white",
-    ghost: "bg-transparent hover:bg-black/5 dark:hover:bg-white/5"
+    destructive: "bg-red-500 text-white hover:bg-red-600",
+    danger: "bg-red-500 text-white hover:bg-red-600",
+    ghost: "bg-transparent hover:bg-black/5 dark:hover:bg-white/5 text-foreground",
+    outline: "bg-transparent border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 text-foreground"
   };
 
-  const sizes = {
+  const sizes: Record<string, string> = {
     sm: "px-4 py-2 text-sm rounded-xl",
     md: "px-6 py-3 font-medium rounded-2xl",
     lg: "px-8 py-4 text-lg font-bold rounded-3xl",
@@ -34,11 +40,11 @@ export function Button({
       whileTap={{ scale: 0.98 }}
       className={cn(
         "inline-flex items-center justify-center transition-colors disabled:opacity-50 disabled:pointer-events-none cursor-pointer",
-        variants[variant],
-        sizes[size],
+        variants[effectiveVariant] || variants.primary,
+        sizes[size] || sizes.md,
         className
       )}
-      {...(props as any)}
+      {...props}
     >
       {children}
     </motion.button>

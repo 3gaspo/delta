@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useData } from '../../providers/DataProvider';
-import { Account, AccountType, DebtDirection, Transaction } from '../../types';
+import { Account, AccountType, DebtDirection } from '../../types';
 import { Button, Input, Select } from '../ui/Base';
-import { Landmark, AlignLeft, ShieldCheck, Archive, Wallet, EyeOff } from 'lucide-react';
+import { Landmark, Archive, Wallet, EyeOff, AlertCircle, Trash2 } from 'lucide-react';
 import { getAccountBalance } from '../../utils/financial';
 import { parseMoney } from '../../lib/utils';
 
@@ -12,7 +12,7 @@ interface AccountFormProps {
 }
 
 export function AccountForm({ onClose, initialData }: AccountFormProps) {
-  const { addAccount, updateAccount, deleteAccount, transactions, addTransaction } = useData();
+  const { addAccount, updateAccount, deleteAccount, transactions, recurringTransactions, addTransaction } = useData();
 
   const currentBalance = initialData ? getAccountBalance(initialData.id, transactions) : 0;
 
@@ -27,6 +27,14 @@ export function AccountForm({ onClose, initialData }: AccountFormProps) {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+
+  const associatedTxCount = initialData 
+    ? transactions.filter(t => t.accountId === initialData.id || t.transferAccountId === initialData.id).length 
+    : 0;
+  const associatedRecCount = initialData
+    ? recurringTransactions.filter(r => r.accountId === initialData.id || r.transferAccountId === initialData.id).length
+    : 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,19 +93,95 @@ export function AccountForm({ onClose, initialData }: AccountFormProps) {
     }
   };
 
-  const handleDelete = async () => {
+  const executeDelete = async () => {
     if (!initialData) return;
-    if (confirm('Delete this account? This cannot be undone.')) {
-      try {
-        setLoading(true);
-        await deleteAccount(initialData.id);
-        onClose();
-      } catch (err: any) {
-        setError(err.message);
-        setLoading(false);
-      }
+    try {
+      setLoading(true);
+      setError(null);
+      await deleteAccount(initialData.id);
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete account');
+      setLoading(false);
     }
   };
+
+  const handleArchiveInstead = async () => {
+    if (!initialData) return;
+    try {
+      setLoading(true);
+      setError(null);
+      await updateAccount(initialData.id, { archived: true });
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Failed to archive account');
+      setLoading(false);
+    }
+  };
+
+  if (isConfirmingDelete && initialData) {
+    return (
+      <div className="space-y-5 py-2">
+        <div className="flex items-center gap-3 text-red-500">
+          <div className="w-10 h-10 rounded-2xl bg-red-500/10 flex items-center justify-center shrink-0">
+            <Trash2 size={20} />
+          </div>
+          <div>
+            <h3 className="font-bold text-base text-foreground">Delete "{initialData.name}"?</h3>
+            <p className="text-xs text-red-500 font-medium">This action cannot be undone.</p>
+          </div>
+        </div>
+
+        {error && <p className="text-red-500 text-xs font-semibold p-3 bg-red-500/10 rounded-xl">{error}</p>}
+
+        <p className="text-xs text-foreground/70 leading-relaxed">
+          {associatedTxCount > 0 || associatedRecCount > 0 ? (
+            <>
+              This account has <strong className="text-foreground">{associatedTxCount} transaction{associatedTxCount !== 1 ? 's' : ''}</strong>
+              {associatedRecCount > 0 && <> and <strong className="text-foreground">{associatedRecCount} recurring rule{associatedRecCount !== 1 ? 's' : ''}</strong></>}. 
+              Deleting this account will permanently remove it along with all its associated transactions.
+            </>
+          ) : (
+            'Are you sure you want to delete this account? It will be removed permanently.'
+          )}
+        </p>
+
+        <div className="flex flex-col gap-2.5 pt-2">
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={executeDelete}
+            disabled={loading}
+            className="w-full text-xs font-bold py-3"
+          >
+            {loading ? 'Deleting...' : (associatedTxCount > 0 ? 'Delete Account & All Transactions' : 'Confirm Delete')}
+          </Button>
+
+          {(associatedTxCount > 0 || associatedRecCount > 0) && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={handleArchiveInstead}
+              disabled={loading}
+              className="w-full text-xs font-semibold py-3"
+            >
+              Archive Account Instead (Keep History)
+            </Button>
+          )}
+
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => setIsConfirmingDelete(false)}
+            disabled={loading}
+            className="w-full text-xs font-medium py-2"
+          >
+            Cancel
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -193,7 +277,13 @@ export function AccountForm({ onClose, initialData }: AccountFormProps) {
           {loading ? 'Saving...' : initialData ? 'Update Account' : 'Create Account'}
         </Button>
         {initialData && (
-          <Button type="button" variant="destructive" ghost onClick={handleDelete} disabled={loading} className="w-full">
+          <Button 
+            type="button" 
+            variant="destructive" 
+            onClick={() => setIsConfirmingDelete(true)} 
+            disabled={loading} 
+            className="w-full"
+          >
             Delete Account
           </Button>
         )}

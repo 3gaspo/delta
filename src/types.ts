@@ -111,6 +111,7 @@ export interface DataContextValue {
   addAccount: (a: Omit<Account, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateAccount: (id: string, a: Partial<Account>) => Promise<void>;
   deleteAccount: (id: string) => Promise<void>;
+  reorderAccounts: (orderedAccounts: { id: string; order: number }[]) => Promise<void>;
   
   addCategory: (c: Omit<Category, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   updateCategory: (id: string, c: Partial<Category>) => Promise<void>;

@@ -13,6 +13,8 @@ import { TransactionForm } from './TransactionForm';
 export function TransactionItem({ transaction }: { transaction: Transaction; key?: React.Key }) {
   const { categories, accounts, deleteTransaction, settings } = useData();
   const [isEditing, setIsEditing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deletingLoading, setDeletingLoading] = useState(false);
   
   const category = categories.find(c => c.id === transaction.categoryId);
   const account = accounts.find(a => a.id === transaction.accountId);
@@ -26,8 +28,14 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
   const isRecurring = transaction.periodicityDays && transaction.periodicityDays > 0;
 
   const handleDelete = async () => {
-    if (confirm('Delete this transaction?')) {
+    try {
+      setDeletingLoading(true);
       await deleteTransaction(transaction.id);
+      setIsDeleting(false);
+    } catch (err) {
+      console.error('Failed to delete transaction:', err);
+    } finally {
+      setDeletingLoading(false);
     }
   };
 
@@ -99,7 +107,7 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
           <button onClick={() => setIsEditing(true)} className="p-1 hover:text-blue-500 transition-colors" title="Edit">
             <Edit3 size={14} />
           </button>
-          <button onClick={handleDelete} className="p-1 hover:text-red-500 transition-colors" title="Delete">
+          <button onClick={() => setIsDeleting(true)} className="p-1 hover:text-red-500 transition-colors" title="Delete">
             <Trash2 size={14} />
           </button>
         </div>
@@ -107,6 +115,45 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
 
       <Modal isOpen={isEditing} onClose={() => setIsEditing(false)} title="Edit Transaction">
         <TransactionForm onClose={() => setIsEditing(false)} initialData={transaction} />
+      </Modal>
+
+      <Modal isOpen={isDeleting} onClose={() => setIsDeleting(false)} title="Delete Transaction">
+        <div className="space-y-4 py-2">
+          <div className="flex items-center gap-3 text-red-500">
+            <div className="w-10 h-10 rounded-2xl bg-red-500/10 flex items-center justify-center shrink-0">
+              <Trash2 size={20} />
+            </div>
+            <div>
+              <h3 className="font-bold text-base text-foreground">
+                Delete "{transaction.name || category?.label || 'Transaction'}"?
+              </h3>
+              <p className="text-xs text-red-500 font-medium">This action cannot be undone.</p>
+            </div>
+          </div>
+          <p className="text-xs text-foreground/70">
+            Are you sure you want to delete this transaction for <strong>{formatCurrency(transaction.amount, settings.currency)}</strong>?
+          </p>
+          <div className="flex flex-col gap-2 pt-2">
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deletingLoading}
+              className="w-full text-xs font-bold py-3"
+            >
+              {deletingLoading ? 'Deleting...' : 'Delete Transaction'}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setIsDeleting(false)}
+              disabled={deletingLoading}
+              className="w-full text-xs font-medium py-2"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );
@@ -123,6 +170,8 @@ export function GroupTransactionItem({
   const { categories, accounts, deleteGroupTransaction, settings } = useData();
   const [expanded, setExpanded] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deletingLoading, setDeletingLoading] = useState(false);
 
   const sharedName = subtransactions[0]?.name || 'Group Transaction';
   const sharedDate = subtransactions[0]?.date || Date.now();
@@ -145,8 +194,14 @@ export function GroupTransactionItem({
   ));
 
   const handleDelete = async () => {
-    if (confirm(`Delete group transaction "${sharedName}" and all ${subtransactions.length} sub-transactions?`)) {
+    try {
+      setDeletingLoading(true);
       await deleteGroupTransaction(groupId);
+      setIsDeleting(false);
+    } catch (err) {
+      console.error('Failed to delete group transaction:', err);
+    } finally {
+      setDeletingLoading(false);
     }
   };
 
@@ -187,7 +242,7 @@ export function GroupTransactionItem({
               <button onClick={() => setIsEditing(true)} className="p-1 hover:text-blue-500 transition-colors" title="Edit Group">
                 <Edit3 size={14} />
               </button>
-              <button onClick={handleDelete} className="p-1 hover:text-red-500 transition-colors" title="Delete Group">
+              <button onClick={() => setIsDeleting(true)} className="p-1 hover:text-red-500 transition-colors" title="Delete Group">
                 <Trash2 size={14} />
               </button>
             </div>
@@ -229,6 +284,45 @@ export function GroupTransactionItem({
 
       <Modal isOpen={isEditing} onClose={() => setIsEditing(false)} title="Edit Group Transaction">
         <TransactionForm onClose={() => setIsEditing(false)} initialData={subtransactions[0]} />
+      </Modal>
+
+      <Modal isOpen={isDeleting} onClose={() => setIsDeleting(false)} title="Delete Group Transaction">
+        <div className="space-y-4 py-2">
+          <div className="flex items-center gap-3 text-red-500">
+            <div className="w-10 h-10 rounded-2xl bg-red-500/10 flex items-center justify-center shrink-0">
+              <Trash2 size={20} />
+            </div>
+            <div>
+              <h3 className="font-bold text-base text-foreground">
+                Delete "{sharedName}"?
+              </h3>
+              <p className="text-xs text-red-500 font-medium">This action cannot be undone.</p>
+            </div>
+          </div>
+          <p className="text-xs text-foreground/70">
+            Are you sure you want to delete this group transaction and all <strong>{subtransactions.length} sub-transactions</strong>?
+          </p>
+          <div className="flex flex-col gap-2 pt-2">
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={deletingLoading}
+              className="w-full text-xs font-bold py-3"
+            >
+              {deletingLoading ? 'Deleting...' : 'Delete Group & All Sub-Transactions'}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setIsDeleting(false)}
+              disabled={deletingLoading}
+              className="w-full text-xs font-medium py-2"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

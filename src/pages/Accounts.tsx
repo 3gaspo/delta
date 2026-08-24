@@ -5,7 +5,8 @@ import { Card, Button } from '../components/ui/Base';
 import { AccountCard, TotalCard } from '../components/accounts/AccountCard';
 import { Modal } from '../components/ui/Modal';
 import { AccountForm } from '../components/accounts/AccountForm';
-import { Plus, Wallet, ShieldAlert, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
+import { AccountReorderModal } from '../components/accounts/AccountReorderModal';
+import { Plus, ArrowUpDown } from 'lucide-react';
 import { computeFinancialTotals } from '../utils/financial';
 import { Account } from '../types';
 
@@ -14,6 +15,7 @@ import { formatCurrency } from '../lib/utils';
 export default function Accounts() {
   const { accounts, transactions, settings, loading } = useData();
   const [isAdding, setIsAdding] = useState(false);
+  const [isReordering, setIsReordering] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
 
   const totals = useMemo(() => computeFinancialTotals(accounts, transactions), [accounts, transactions]);
@@ -27,9 +29,22 @@ export default function Accounts() {
     <PageContainer 
       title="Accounts"
       actions={
-        <Button size="icon" onClick={() => setIsAdding(true)}>
-          <Plus size={20} />
-        </Button>
+        <div className="flex items-center gap-2">
+          {accounts.length > 1 && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setIsReordering(true)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold"
+              title="Reorder accounts"
+            >
+              <ArrowUpDown size={15} /> Reorder
+            </Button>
+          )}
+          <Button size="icon" onClick={() => setIsAdding(true)} title="New Account">
+            <Plus size={20} />
+          </Button>
+        </div>
       }
     >
       <div className="mb-8 p-8 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-[40px] flex flex-col gap-2">
@@ -68,6 +83,8 @@ export default function Accounts() {
       <Modal isOpen={!!editingAccount} onClose={() => setEditingAccount(null)} title="Edit Account">
         {editingAccount && <AccountForm onClose={() => setEditingAccount(null)} initialData={editingAccount} />}
       </Modal>
+
+      <AccountReorderModal isOpen={isReordering} onClose={() => setIsReordering(false)} />
     </PageContainer>
   );
 }

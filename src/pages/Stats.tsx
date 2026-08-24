@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { formatCurrency, cn } from '../lib/utils';
 import { TransactionType } from '../types';
+import { isInitialBalanceTx } from '../utils/financial';
 import { 
   startOfMonth, endOfMonth, format, eachMonthOfInterval, 
   startOfYear, startOfWeek, endOfWeek,
@@ -114,6 +115,7 @@ export default function Stats() {
         
         let net = 0;
         monthTransactions.forEach(t => {
+          if (isInitialBalanceTx(t)) return;
           const isIncome = t.type === 'income';
           const isExpense = t.type === 'expense' || t.type === 'subscription';
           
@@ -146,6 +148,7 @@ export default function Stats() {
         
         let net = 0;
         weekTransactions.forEach(t => {
+          if (isInitialBalanceTx(t)) return;
           const isIncome = t.type === 'income';
           const isExpense = t.type === 'expense' || t.type === 'subscription';
           
@@ -197,7 +200,7 @@ export default function Stats() {
       };
 
       intervalTransactions.forEach(t => {
-        if (t.isInitialBalance) return;
+        if (isInitialBalanceTx(t)) return;
         const isExpense = t.type === 'expense' || t.type === 'subscription';
         const isIncome = t.type === 'income';
         
@@ -214,7 +217,7 @@ export default function Stats() {
     const totalIncome = flowData.reduce((sum, d) => sum + d.income, 0);
 
     // 3. Category Data
-    const catFiltered = getFiltered().filter(t => t.date >= startOfMonth(now).getTime() && t.date <= endOfMonth(now).getTime());
+    const catFiltered = getFiltered().filter(t => !isInitialBalanceTx(t) && t.date >= startOfMonth(now).getTime() && t.date <= endOfMonth(now).getTime());
     const categoryMap = new Map<string, { value: number, budget: number, color: string }>();
     const CHART_COLORS = [
       '#000000', '#3b82f6', '#ef4444', '#10b981', '#f59e0b', 

@@ -1,5 +1,13 @@
 import { Transaction, Account, Category, Tag } from '../types';
 
+export function isInitialBalanceTx(t: Transaction): boolean {
+  return Boolean(
+    t.isInitialBalance ||
+    t.description?.toLowerCase() === 'initial balance' ||
+    t.name?.toLowerCase().includes('initial balance')
+  );
+}
+
 export function getAccountBalance(accountId: string, transactions: Transaction[]): number {
   return transactions
     .filter(t => t.status !== 'hidden' && (t.accountId === accountId || t.transferAccountId === accountId))
@@ -88,7 +96,7 @@ export function getStatsAggregation(
     return true;
   });
 
-  const nonInitial = filtered.filter(t => !t.isInitialBalance);
+  const nonInitial = filtered.filter(t => !isInitialBalanceTx(t));
 
   const income = nonInitial.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
   const expenses = nonInitial.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);

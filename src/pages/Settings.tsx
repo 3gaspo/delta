@@ -313,7 +313,7 @@ export default function Settings() {
             <Button onClick={() => { resetData('all'); setIsResetModal(false); }} variant="destructive">
               Reset All Data
             </Button>
-            <Button onClick={() => setIsResetModal(false)} ghost>
+            <Button onClick={() => setIsResetModal(false)} variant="ghost">
               Cancel
             </Button>
           </div>
