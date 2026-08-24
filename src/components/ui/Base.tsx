@@ -73,7 +73,7 @@ export function Card({ children, className, label, actions }: CardProps) {
           )}
         </div>
       )}
-      <div className={cn("bg-white dark:bg-black/20 rounded-2xl overflow-hidden shadow-sm", className)}>
+      <div className={cn("bg-white dark:bg-black/20 rounded-2xl shadow-sm", className)}>
         {children}
       </div>
     </section>
@@ -142,11 +142,15 @@ export function Select({
     const extract = (nodes: React.ReactNode) => {
       React.Children.forEach(nodes, (child) => {
         if (!React.isValidElement(child)) return;
-        if (child.type === 'option') {
+        const childType = typeof child.type === 'string' 
+          ? child.type.toLowerCase() 
+          : (child.type as any)?.name?.toLowerCase();
+        
+        if (childType === 'option' || child.type === 'option' || (child.props as any)?.value !== undefined) {
           const optProps = child.props as any;
           items.push({
             value: optProps.value !== undefined ? String(optProps.value) : String(optProps.children || ''),
-            label: optProps.children,
+            label: optProps.children !== undefined ? optProps.children : String(optProps.value || ''),
             disabled: optProps.disabled
           });
         } else if (child.type === React.Fragment || (child.props as any)?.children) {
@@ -204,7 +208,7 @@ export function Select({
   };
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div ref={containerRef} className={cn("relative w-full", isOpen && "z-50")}>
       {/* Hidden standard input for form integration */}
       <input type="hidden" name={name} value={currentValue} required={required} />
 
@@ -255,7 +259,7 @@ export function Select({
             role="listbox"
             className={cn(
               "absolute left-0 right-0 top-full mt-2 z-[150]",
-              "bg-white/95 dark:bg-[#18181b]/95 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-2xl",
+              "bg-card/95 dark:bg-[#18181b]/95 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-2xl",
               "rounded-2xl p-1.5 max-h-60 overflow-y-auto custom-scrollbar"
             )}
           >

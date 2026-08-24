@@ -74,9 +74,23 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
 
   const [mode, setMode] = useState<FormTabMode>(initialMode);
 
+  const getTomorrowDateStr = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const tomorrowStr = getTomorrowDateStr();
+
   // Common shared state
   const rawAmount = initialRecurringData?.amount ?? initialData?.amount;
-  const rawDate = initialRecurringData?.startDate ?? initialData?.date ?? Date.now();
+  const rawDate = initialRecurringData?.startDate ?? initialData?.date;
+  const initialDateStr = rawDate 
+    ? new Date(rawDate).toISOString().split('T')[0] 
+    : (initialMode === 'subscription' ? tomorrowStr : new Date().toISOString().split('T')[0]);
   const rawAccId = initialRecurringData?.accountId ?? initialData?.accountId ?? accounts[0]?.id ?? '';
   const rawCatId = initialRecurringData?.categoryId ?? initialData?.categoryId ?? availableCategories.find(c => c.label === 'Uncategorized')?.id ?? availableCategories[0]?.id ?? '';
   const rawTagIds = initialRecurringData?.tagIds ?? initialData?.tagIds ?? [];
@@ -88,7 +102,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
   const [formData, setFormData] = useState({
     amount: rawAmount ? rawAmount.toString() : '',
     name: rawName,
-    date: new Date(rawDate).toISOString().split('T')[0],
+    date: initialDateStr,
     accountId: rawAccId,
     categoryId: rawCatId,
     tagIds: rawTagIds,
@@ -302,10 +316,19 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
         const finalTagIds = await processTags(tagsInput);
 
         if (isRecurringTransfer) {
+          const selectedDate = new Date(formData.date);
+          const tomorrow = new Date();
+          tomorrow.setHours(0, 0, 0, 0);
+          tomorrow.setDate(tomorrow.getDate() + 1);
+
+          if (selectedDate.getTime() < tomorrow.getTime()) {
+            throw new Error('Recurring start date must be tomorrow or a future date.');
+          }
+
           const recurringTransferDoc = {
             name: transferName,
             amount,
-            startDate: new Date(formData.date).getTime(),
+            startDate: selectedDate.getTime(),
             accountId: formData.accountId,
             transferAccountId: formData.transferAccountId,
             categoryId: '',
@@ -367,10 +390,19 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
 
         const finalTagIds = await processTags(tagsInput);
 
+        const selectedDate = new Date(formData.date);
+        const tomorrow = new Date();
+        tomorrow.setHours(0, 0, 0, 0);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+
+        if (selectedDate.getTime() < tomorrow.getTime()) {
+          throw new Error('Recurring start date must be tomorrow or a future date.');
+        }
+
         const recurringDoc = {
           name: formData.name.trim(),
           amount,
-          startDate: new Date(formData.date).getTime(),
+          startDate: selectedDate.getTime(),
           accountId: formData.accountId,
           categoryId: formData.categoryId,
           tagIds: finalTagIds,
@@ -471,7 +503,17 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
           role="tab"
           aria-selected={mode === 'subscription'}
           title="Recurring Subscription"
-          onClick={() => setMode('subscription')}
+          onClick={() => {
+            setMode('subscription');
+            // If date is today or past, bump to tomorrow automatically for user convenience
+            const curDate = new Date(formData.date);
+            const tomorrow = new Date();
+            tomorrow.setHours(0, 0, 0, 0);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            if (isNaN(curDate.getTime()) || curDate.getTime() < tomorrow.getTime()) {
+              setFormData(prev => ({ ...prev, date: tomorrowStr }));
+            }
+          }}
           className={cn(
             "py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
             mode === 'subscription'
@@ -923,11 +965,14 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Start Date</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
+                  Start Date {transferPeriodicity !== '0' ? '(Starts Tomorrow or Later)' : ''}
+                </span>
                 <Input 
                   type="date" 
                   icon={Calendar}
                   value={formData.date}
+                  min={transferPeriodicity !== '0' ? tomorrowStr : undefined}
                   onChange={e => setFormData({ ...formData, date: e.target.value })}
                   required
                 />
@@ -938,7 +983,19 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 <Select 
                   icon={Repeat}
                   value={transferPeriodicity}
-                  onChange={e => setTransferPeriodicity(e.target.value)}
+                  onChange={e => {
+                    const newPeriod = e.target.value;
+                    setTransferPeriodicity(newPeriod);
+                    if (newPeriod !== '0') {
+                      const curDate = new Date(formData.date);
+                      const tomorrow = new Date();
+                      tomorrow.setHours(0, 0, 0, 0);
+                      tomorrow.setDate(tomorrow.getDate() + 1);
+                      if (isNaN(curDate.getTime()) || curDate.getTime() < tomorrow.getTime()) {
+                        setFormData(prev => ({ ...prev, date: tomorrowStr }));
+                      }
+                    }
+                  }}
                 >
                   <option value="0">One-time (No repeat)</option>
                   <option value="7">Every 7 days (Weekly)</option>
@@ -1088,11 +1145,14 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
               </label>
 
               <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Start Date (First Occurrence)</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
+                  Start Date (Starts Tomorrow or Later)
+                </span>
                 <Input 
                   type="date" 
                   icon={Calendar}
                   value={formData.date}
+                  min={tomorrowStr}
                   onChange={e => setFormData({ ...formData, date: e.target.value })}
                   required
                 />

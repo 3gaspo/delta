@@ -88,19 +88,24 @@ export function RecurringList({
                 "w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-sm",
                 isIncome ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" :
                 isTransfer ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" :
-                "bg-purple-500/10 text-purple-600 dark:text-purple-400"
+                "bg-red-500/10 text-red-600 dark:text-red-400"
               )}>
                 {isIncome ? <ArrowDownLeft size={18} /> : 
                  isTransfer ? <ArrowRightLeft size={18} /> : 
-                 <Repeat size={18} />}
+                 <ArrowUpRight size={18} />}
               </div>
 
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h4 className="font-bold truncate text-sm">
+                <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                  <h4 className="font-bold text-sm text-foreground break-words">
                     {rule.name}
                   </h4>
-                  <span className="text-[9px] font-black uppercase tracking-wider bg-purple-500/10 text-purple-600 dark:text-purple-400 px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0">
+                  <span className={cn(
+                    "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0",
+                    isIncome ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" :
+                    isTransfer ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" :
+                    "bg-red-500/10 text-red-600 dark:text-red-400"
+                  )}>
                     <Repeat size={10} /> {getPeriodLabel(rule.periodicityDays)}
                   </span>
                   {!isActive && (
@@ -147,7 +152,7 @@ export function RecurringList({
                   "font-bold text-lg",
                   isIncome ? "text-emerald-600 dark:text-emerald-400" :
                   isTransfer ? "text-blue-600 dark:text-blue-400" :
-                  "text-purple-600 dark:text-purple-400"
+                  "text-red-600 dark:text-red-400"
                 )}>
                   {isIncome ? '+' : isTransfer ? '' : '-'}{formatCurrency(rule.amount, settings.currency)}
                 </p>

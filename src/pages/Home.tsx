@@ -133,7 +133,7 @@ export default function Home() {
           actions={
             <button
               onClick={() => handleOpenAdd('subscription')}
-              className="text-xs font-bold text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1"
+              className="text-xs font-bold text-foreground/70 hover:text-foreground hover:underline flex items-center gap-1"
             >
               <Plus size={14} /> Add Recurring
             </button>

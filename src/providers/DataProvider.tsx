@@ -21,23 +21,28 @@ const DEFAULT_SETTINGS: UserSettings = {
 };
 
 const CHART_COLORS = [
-  '#000000', '#3b82f6', '#ef4444', '#10b981', '#f59e0b', 
-  '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6', '#f43f5e'
+  '#64748b', '#3b82f6', '#ef4444', '#10b981', '#f59e0b', 
+  '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6', '#f43f5e',
+  '#0ea5e9', '#84cc16', '#a855f7', '#d97706', '#06b6d4'
 ];
 
 const DEFAULT_CATEGORIES = [
-  { label: 'Uncategorized', type: 'both', color: CHART_COLORS[0] },
-  { label: 'Food', type: 'expense', color: CHART_COLORS[1] },
-  { label: 'Transport', type: 'expense', color: CHART_COLORS[2] },
-  { label: 'Housing', type: 'expense', color: CHART_COLORS[3] },
-  { label: 'Health', type: 'expense', color: CHART_COLORS[4] },
-  { label: 'Leisure', type: 'expense', color: CHART_COLORS[5] },
-  { label: 'Salary', type: 'income', color: CHART_COLORS[6] },
+  { label: 'Uncategorized', type: 'both', color: '#64748b' },
+  { label: 'Food', type: 'expense', color: '#f59e0b' },
+  { label: 'Transport', type: 'expense', color: '#3b82f6' },
+  { label: 'Housing', type: 'expense', color: '#ef4444' },
+  { label: 'Health', type: 'expense', color: '#10b981' },
+  { label: 'Leisure', type: 'expense', color: '#ec4899' },
+  { label: 'Salary', type: 'income', color: '#8b5cf6' },
+  { label: 'Work', type: 'both', color: '#6366f1' },
+  { label: 'Finance', type: 'both', color: '#14b8a6' },
 ];
 
 const DEFAULT_TAGS = [
   { label: 'Essential' },
   { label: 'Optional' },
+  { label: 'Work' },
+  { label: 'Finance' },
 ];
 
 const dedupeCategories = (cats: Category[]): Category[] => {
@@ -280,6 +285,61 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       migrateLegacy();
       return;
+    }
+
+    // Migration: Ensure Work and Finance default categories & tags exist
+    if (data.categories.length > 0) {
+      const existingCatLabels = new Set(data.categories.map(c => (c.label || '').toLowerCase().trim()));
+      const missingCatDefaults = DEFAULT_CATEGORIES.filter(c => !existingCatLabels.has(c.label.toLowerCase().trim()));
+      const catMigrationKey = `delta_${uid}_v2_categories_seeded`;
+
+      if (missingCatDefaults.length > 0 && !localStorage.getItem(catMigrationKey)) {
+        localStorage.setItem(catMigrationKey, 'true');
+        const newCategories: Category[] = missingCatDefaults.map(c => ({
+          ...c,
+          id: crypto.randomUUID(),
+          createdAt: now,
+          updatedAt: now
+        })) as Category[];
+
+        if (firebaseReady && db && user) {
+          const batch = writeBatch(db);
+          newCategories.forEach(c => batch.set(doc(db, `users/${uid}/categories`, c.id), c));
+          batch.commit();
+        } else {
+          const existing = JSON.parse(localStorage.getItem(`delta_${uid}_categories`) || '[]');
+          const updated = [...existing, ...newCategories];
+          localStorage.setItem(`delta_${uid}_categories`, JSON.stringify(updated));
+          setData(prev => ({ ...prev, categories: dedupeCategories(updated) }));
+        }
+      }
+    }
+
+    if (data.tags.length > 0) {
+      const existingTagLabels = new Set(data.tags.map(t => (t.label || '').toLowerCase().trim()));
+      const missingTagDefaults = DEFAULT_TAGS.filter(t => !existingTagLabels.has(t.label.toLowerCase().trim()));
+      const tagMigrationKey = `delta_${uid}_v2_tags_seeded`;
+
+      if (missingTagDefaults.length > 0 && !localStorage.getItem(tagMigrationKey)) {
+        localStorage.setItem(tagMigrationKey, 'true');
+        const newTags: Tag[] = missingTagDefaults.map(t => ({
+          ...t,
+          id: crypto.randomUUID(),
+          createdAt: now,
+          updatedAt: now
+        })) as Tag[];
+
+        if (firebaseReady && db && user) {
+          const batch = writeBatch(db);
+          newTags.forEach(t => batch.set(doc(db, `users/${uid}/tags`, t.id), t));
+          batch.commit();
+        } else {
+          const existing = JSON.parse(localStorage.getItem(`delta_${uid}_tags`) || '[]');
+          const updated = [...existing, ...newTags];
+          localStorage.setItem(`delta_${uid}_tags`, JSON.stringify(updated));
+          setData(prev => ({ ...prev, tags: updated }));
+        }
+      }
     }
 
     // Standard auto-generator for active recurring transactions

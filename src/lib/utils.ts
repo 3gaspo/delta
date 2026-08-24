@@ -6,12 +6,19 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number, currency: string = 'EUR') {
-  return new Intl.NumberFormat('en-IE', {
-    style: 'currency',
-    currency: currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+  const safeCurrency = (currency || 'EUR').toUpperCase();
+  const isZeroDecimal = ['JPY', 'KRW', 'VND', 'CLP', 'PYG', 'UGX', 'RWF'].includes(safeCurrency);
+
+  try {
+    return new Intl.NumberFormat(safeCurrency === 'EUR' ? 'en-IE' : 'en-US', {
+      style: 'currency',
+      currency: safeCurrency,
+      minimumFractionDigits: isZeroDecimal ? 0 : 2,
+      maximumFractionDigits: isZeroDecimal ? 0 : 2,
+    }).format(amount);
+  } catch {
+    return `${safeCurrency} ${amount.toFixed(isZeroDecimal ? 0 : 2)}`;
+  }
 }
 
 export function formatDate(date: string | number | Date) {

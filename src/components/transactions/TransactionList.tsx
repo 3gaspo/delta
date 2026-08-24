@@ -50,22 +50,25 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
           "w-10 h-10 rounded-2xl flex items-center justify-center shrink-0",
           isIncome ? "bg-emerald-500/10 text-emerald-500" : 
           isTransfer ? "bg-blue-500/10 text-blue-500" :
-          isSubscription ? "bg-purple-500/10 text-purple-500" :
           "bg-red-500/10 text-red-500"
         )}>
           {isIncome ? <ArrowDownLeft size={18} /> : 
            isTransfer ? <ArrowRightLeft size={18} /> : 
-           isSubscription ? <ArrowUpRight size={18} /> : 
            <ArrowUpRight size={18} />}
         </div>
         
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h4 className="font-bold truncate">
+          <div className="flex flex-wrap items-center gap-2 mb-0.5">
+            <h4 className="font-bold text-sm text-foreground break-words">
               {transaction.name || category?.label || 'Untitled'}
             </h4>
             {isRecurring && (
-              <span className="text-[8px] font-black uppercase tracking-wider bg-purple-500/10 text-purple-600 dark:text-purple-400 px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0">
+              <span className={cn(
+                "text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0",
+                isIncome ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" :
+                isTransfer ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" :
+                "bg-red-500/10 text-red-600 dark:text-red-400"
+              )}>
                 <Repeat size={10} /> {transaction.periodicityDays}d
               </span>
             )}
@@ -79,7 +82,7 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
           {transaction.description && (
             <p className="text-[10px] opacity-60 mb-1 truncate">{transaction.description}</p>
           )}
-          <div className="flex items-center gap-1.5 opacity-40 text-[10px] font-medium uppercase tracking-wider">
+          <div className="flex items-center gap-1.5 opacity-40 text-[10px] font-medium uppercase tracking-wider flex-wrap">
             <span>{formatDate(transaction.date)}</span>
             <span>•</span>
             <span>{account?.name}</span>
@@ -87,6 +90,18 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
               <>
                 <ArrowRightLeft size={10} />
                 <span>{transferAccount?.name}</span>
+              </>
+            )}
+            {category && !isTransfer && (
+              <>
+                <span>•</span>
+                <span className="inline-flex items-center gap-1">
+                  <span 
+                    className="w-1.5 h-1.5 rounded-full inline-block shrink-0" 
+                    style={{ backgroundColor: category.color || '#888' }} 
+                  />
+                  <span>{category.label}</span>
+                </span>
               </>
             )}
           </div>
@@ -98,7 +113,6 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
           "font-bold text-lg",
           isIncome ? "text-emerald-500" : 
           isTransfer ? "text-blue-500" : 
-          isSubscription ? "text-purple-500" :
           "text-red-500"
         )}>
           {isIncome ? '+' : isTransfer ? '' : '-'}{formatCurrency(transaction.amount, settings.currency)}
@@ -262,7 +276,10 @@ export function GroupTransactionItem({
             return (
               <div key={st.id || idx} className="flex items-center justify-between text-xs py-1.5 border-b border-black/5 dark:border-white/5 last:border-0">
                 <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0" />
+                  <span 
+                    className="w-1.5 h-1.5 rounded-full shrink-0 shadow-sm" 
+                    style={{ backgroundColor: cat?.color || '#a855f7' }}
+                  />
                   <span className="font-semibold truncate">
                     {cat?.label || 'Uncategorized'}
                   </span>

@@ -3,17 +3,25 @@ import { useAuth } from '../providers/AuthProvider';
 import { useData } from '../providers/DataProvider';
 import { useTheme } from '../providers/ThemeProvider';
 import { PageContainer } from '../components/layout/PageContainer';
-import { Card, Button, Input, Select } from '../components/ui/Base';
+import { Card, Button, Input } from '../components/ui/Base';
 import { Modal } from '../components/ui/Modal';
 import { 
   LogOut, Download, RotateCcw, Plus, Trash2, 
   Moon, Mail, Lock, Eye, EyeOff, User, Heart, ChevronRight
 } from 'lucide-react';
 import { generateCSV } from '../utils/financial';
-import { cn } from '../lib/utils';
+import { cn, formatCurrency } from '../lib/utils';
+import { CategoryColorPicker } from '../components/categories/CategoryColorPicker';
 import packageJson from '../../package.json';
 
 const SUPPORT_URL = "https://ko-fi.com/3gaspo";
+
+const CURRENCY_OPTIONS = [
+  { code: 'EUR', symbol: '€', label: 'Euro' },
+  { code: 'USD', symbol: '$', label: 'Dollar' },
+  { code: 'JPY', symbol: '¥', label: 'Yen' },
+  { code: 'GBP', symbol: '£', label: 'Pound' },
+];
 
 export default function Settings() {
   const { user, signOut, isFirebase, signIn, signUp } = useAuth();
@@ -52,6 +60,7 @@ export default function Settings() {
 
   // Simple category/tag management
   const [newCat, setNewCat] = useState('');
+  const [newCatColor, setNewCatColor] = useState('#3b82f6');
   const [newTag, setNewTag] = useState('');
 
   const handleCSV = () => {
@@ -76,13 +85,28 @@ export default function Settings() {
       {/* App Specific Settings */}
       <Card label="Categories">
         <div className="p-4 space-y-6">
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            <CategoryColorPicker 
+              color={newCatColor} 
+              onChange={setNewCatColor} 
+              size="md" 
+            />
             <Input 
               placeholder="New category..." 
               value={newCat} 
               onChange={e => setNewCat(e.target.value)} 
+              className="flex-1"
             />
-            <Button size="icon" onClick={() => { if(newCat) { addCategory({ label: newCat }); setNewCat(''); } }}>
+            <Button 
+              size="icon" 
+              onClick={() => { 
+                if (newCat.trim()) { 
+                  addCategory({ label: newCat.trim(), color: newCatColor }); 
+                  setNewCat(''); 
+                } 
+              }}
+              title="Add category"
+            >
               <Plus size={18} />
             </Button>
           </div>
@@ -90,10 +114,17 @@ export default function Settings() {
             {categories.map(c => (
               <div key={c.id} className="flex flex-col gap-2 p-4 bg-black/5 dark:bg-white/5 rounded-2xl">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold uppercase tracking-wider">{c.label}</span>
+                  <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                    <span 
+                      className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm" 
+                      style={{ backgroundColor: c.color || '#64748b' }} 
+                    />
+                    {c.label}
+                  </span>
                   <button 
                     onClick={() => deleteCategory(c.id)}
                     className="p-1 hover:text-red-500 transition-colors opacity-30 hover:opacity-100"
+                    title={`Delete ${c.label}`}
                   >
                     <Trash2 size={14} />
                   </button>
@@ -104,12 +135,16 @@ export default function Settings() {
                      <input 
                        type="number"
                        placeholder="Monthly limit"
-                       className="w-full bg-background border border-black/5 dark:border-white/5 rounded-2xl px-4 py-4 pl-12 text-xs font-bold outline-none focus:ring-1 focus:ring-black/10 dark:focus:ring-white/10"
+                       className="w-full bg-background border border-black/5 dark:border-white/5 rounded-2xl px-4 py-3.5 pl-12 text-xs font-bold outline-none focus:ring-1 focus:ring-black/10 dark:focus:ring-white/10 transition-all"
                        value={c.budgetLimit || ''}
                        onChange={e => updateCategory(c.id, { budgetLimit: parseFloat(e.target.value) || 0 })}
                      />
                   </div>
-                  <div className="w-12 h-12 rounded-2xl shadow-inner border border-black/5 dark:border-white/5 flex-shrink-0" style={{ backgroundColor: c.color }} />
+                  <CategoryColorPicker 
+                    color={c.color || '#64748b'} 
+                    onChange={(newColor) => updateCategory(c.id, { color: newColor })} 
+                    size="md" 
+                  />
                 </div>
               </div>
             ))}
@@ -146,16 +181,38 @@ export default function Settings() {
       </Card>
 
       <Card label="Currency">
-        <div className="p-4">
-          <Select 
-            value={settings.currency} 
-            onChange={e => updateSettings({ currency: e.target.value })}
-          >
-            <option value="EUR">EUR (€)</option>
-            <option value="USD">USD ($)</option>
-            <option value="GBP">GBP (£)</option>
-            <option value="JPY">JPY (¥)</option>
-          </Select>
+        <div className="p-4 space-y-3">
+          <div className="grid grid-cols-4 gap-2">
+            {CURRENCY_OPTIONS.map(c => {
+              const isSelected = (settings.currency || 'EUR') === c.code;
+              return (
+                <button
+                  key={c.code}
+                  type="button"
+                  onClick={() => updateSettings({ currency: c.code })}
+                  className={cn(
+                    "flex flex-col items-center justify-center p-3 rounded-2xl border transition-all text-center cursor-pointer",
+                    isSelected
+                      ? "bg-black text-white dark:bg-white dark:text-black border-transparent shadow-sm font-bold scale-[1.02]"
+                      : "bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/5 hover:bg-black/10 dark:hover:bg-white/10 opacity-75 hover:opacity-100"
+                  )}
+                >
+                  <span className="text-lg font-black leading-tight">{c.symbol}</span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider mt-0.5">{c.code}</span>
+                  <span className="text-[9px] opacity-60 font-medium">{c.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center justify-between px-1 pt-1 border-t border-black/5 dark:border-white/5">
+            <span className="text-[10px] font-bold uppercase tracking-wider opacity-40">
+              Active Format
+            </span>
+            <span className="text-[11px] font-mono font-bold opacity-80">
+              {formatCurrency(1250, settings.currency || 'EUR')}
+            </span>
+          </div>
         </div>
       </Card>
 

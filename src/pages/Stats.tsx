@@ -229,7 +229,7 @@ export default function Stats() {
         .filter(t => t.categoryId === cat.id && (t.type === 'expense' || t.type === 'subscription'))
         .reduce((sum, t) => sum + t.amount, 0);
       
-      const existingColor = CHART_COLORS[idx % CHART_COLORS.length];
+      const existingColor = cat.color || CHART_COLORS[idx % CHART_COLORS.length];
       categoryMap.set(cat.label, {
         value: total,
         budget: cat.budgetLimit || 0,
