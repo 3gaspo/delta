@@ -46,10 +46,24 @@ export function getPeriodicityLabel(periodicityDays: number): string {
 }
 
 export function calculateNextDueDate(rule: RecurringTransaction): number {
+  if (!rule.periodicityDays || rule.periodicityDays <= 0) {
+    return rule.startDate || Date.now();
+  }
   if (!rule.lastGeneratedDate) {
     return rule.startDate;
   }
   return getNextPeriodDate(rule.lastGeneratedDate, rule.periodicityDays);
+}
+
+export function sortRecurringByNextDate(rules: RecurringTransaction[]): RecurringTransaction[] {
+  return [...rules].sort((a, b) => {
+    const nextA = calculateNextDueDate(a);
+    const nextB = calculateNextDueDate(b);
+    if (nextA !== nextB) {
+      return nextA - nextB;
+    }
+    return (a.name || '').localeCompare(b.name || '');
+  });
 }
 
 export function generateDueTransactions(

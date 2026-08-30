@@ -3,6 +3,7 @@ import { Transaction } from '../../types';
 import { useData } from '../../providers/DataProvider';
 import { formatCurrency, formatDate, cn } from '../../lib/utils';
 import { Button } from '../ui/Base';
+import { startOfDay } from 'date-fns';
 import { 
   Trash2, Edit3, ArrowUpRight, ArrowDownLeft, ArrowRightLeft, 
   AlignLeft, Repeat, Layers3, ChevronDown, ChevronUp, Layers 
@@ -392,7 +393,18 @@ export function TransactionList({ transactions }: TransactionListProps) {
     });
   });
 
-  historyItems.sort((a, b) => b.sortDate - a.sortDate || b.sortCreatedAt - a.sortCreatedAt);
+  historyItems.sort((a, b) => {
+    const dayA = startOfDay(new Date(a.sortDate)).getTime();
+    const dayB = startOfDay(new Date(b.sortDate)).getTime();
+
+    if (dayB !== dayA) {
+      return dayB - dayA;
+    }
+
+    const createdA = a.sortCreatedAt || a.sortDate;
+    const createdB = b.sortCreatedAt || b.sortDate;
+    return createdB - createdA;
+  });
 
   if (historyItems.length === 0) {
     return (

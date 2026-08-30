@@ -1,12 +1,13 @@
+import React from 'react';
 import { Account } from '../../types';
 import { useData } from '../../providers/DataProvider';
 import { formatCurrency, cn } from '../../lib/utils';
 import { getAccountBalance } from '../../utils/financial';
 import { Wallet, Landmark, TrendingDown, TrendingUp, EyeOff } from 'lucide-react';
 
-export function AccountCard({ account, onClick }: any) {
+export function AccountCard({ account, onClick }: { account: Account; onClick: () => void; key?: React.Key }) {
   const { transactions, settings } = useData();
-  const balance = getAccountBalance(account.id, transactions);
+  const balance = getAccountBalance(account.id, transactions, account);
   
   const isDebt = account.type === 'debt';
   const isReceivable = account.debtDirection === 'receivable';

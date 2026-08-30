@@ -2,16 +2,14 @@ import { useState, useMemo } from 'react';
 import { useData } from '../providers/DataProvider';
 import { PageContainer } from '../components/layout/PageContainer';
 import { TransactionList } from '../components/transactions/TransactionList';
-import { RecurringList } from '../components/transactions/RecurringList';
 import { Card, Button, Input, Select } from '../components/ui/Base';
 import { Modal } from '../components/ui/Modal';
 import { TransactionForm, FormTabMode } from '../components/transactions/TransactionForm';
-import { Plus, Search, Repeat } from 'lucide-react';
-import { formatCurrency } from '../lib/utils';
+import { Plus, Search } from 'lucide-react';
 import { computeFinancialTotals } from '../utils/financial';
 
 export default function Home() {
-  const { transactions, recurringTransactions, accounts, categories, tags, settings, loading } = useData();
+  const { transactions, accounts, categories, tags, settings, loading } = useData();
   const [isAdding, setIsAdding] = useState(false);
   const [addDefaultMode, setAddDefaultMode] = useState<FormTabMode>('single');
   const [search, setSearch] = useState('');
@@ -22,8 +20,6 @@ export default function Home() {
     type: 'all',
     status: 'all'
   });
-
-  const totals = useMemo(() => computeFinancialTotals(accounts, transactions), [accounts, transactions]);
 
   const hiddenAccountIds = useMemo(() => new Set(accounts.filter(a => a.hidden).map(a => a.id)), [accounts]);
 
@@ -49,31 +45,6 @@ export default function Home() {
       return true;
     });
   }, [transactions, search, filters, categories, accounts, hiddenAccountIds]);
-
-  const filteredRecurringTransactions = useMemo(() => {
-    return recurringTransactions.filter(r => {
-      if (r.type !== 'transfer' && hiddenAccountIds.has(r.accountId)) {
-        return false;
-      }
-      if (search) {
-        const query = search.toLowerCase();
-        const cat = categories.find(c => c.id === r.categoryId)?.label.toLowerCase() || '';
-        const acc = accounts.find(a => a.id === r.accountId)?.name.toLowerCase() || '';
-        const name = r.name?.toLowerCase() || '';
-        const desc = r.description?.toLowerCase() || '';
-        if (!cat.includes(query) && !acc.includes(query) && !name.includes(query) && !desc.includes(query)) return false;
-      }
-      if (filters.accountId !== 'all' && r.accountId !== filters.accountId && r.transferAccountId !== filters.accountId) return false;
-      if (filters.categoryId !== 'all' && r.categoryId !== filters.categoryId) return false;
-      if (filters.tagId !== 'all' && !r.tagIds.includes(filters.tagId)) return false;
-      if (filters.type !== 'all') {
-        if (filters.type === 'expense' && r.type !== 'expense' && r.type !== 'subscription') return false;
-        if (filters.type === 'income' && r.type !== 'income') return false;
-        if (filters.type === 'transfer' && r.type !== 'transfer') return false;
-      }
-      return true;
-    });
-  }, [recurringTransactions, search, filters, categories, accounts, hiddenAccountIds]);
 
   const handleOpenAdd = (mode: FormTabMode = 'single') => {
     setAddDefaultMode(mode);
@@ -126,28 +97,14 @@ export default function Home() {
         <Card label="Transaction History">
           <TransactionList transactions={filteredTransactions} />
         </Card>
-
-        {/* Recurring Transactions Block */}
-        <Card 
-          label="Recurring Transactions"
-          actions={
-            <button
-              onClick={() => handleOpenAdd('subscription')}
-              className="text-xs font-bold text-foreground/70 hover:text-foreground hover:underline flex items-center gap-1"
-            >
-              <Plus size={14} /> Add Recurring
-            </button>
-          }
-        >
-          <RecurringList 
-            recurringTransactions={filteredRecurringTransactions}
-            onAddNew={() => handleOpenAdd('subscription')} 
-          />
-        </Card>
       </div>
 
       <Modal isOpen={isAdding} onClose={() => setIsAdding(false)} title="New Transaction">
-        <TransactionForm onClose={() => setIsAdding(false)} defaultMode={addDefaultMode} />
+        <TransactionForm 
+          onClose={() => setIsAdding(false)} 
+          allowedModes={['single', 'group', 'transfer']} 
+          defaultMode={addDefaultMode} 
+        />
       </Modal>
     </PageContainer>
   );

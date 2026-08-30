@@ -79,7 +79,7 @@ export function CategoryColorPicker({
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 top-full mt-2 z-50 p-3 bg-card border border-black/10 dark:border-white/10 rounded-2xl shadow-2xl w-64 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl">
+        <div className="absolute right-0 top-full mt-2 z-50 p-3 bg-white/95 dark:bg-neutral-900/95 border border-black/10 dark:border-white/10 rounded-2xl shadow-2xl w-64 backdrop-blur-xl">
           <div className="flex items-center justify-between pb-2 mb-2 border-b border-black/5 dark:border-white/5">
             <span className="text-[10px] font-black uppercase tracking-wider opacity-60">
               Category Color

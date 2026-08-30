@@ -9,6 +9,7 @@ import {
   writeBatch, getDocs 
 } from 'firebase/firestore';
 import { generateDueTransactions } from '../utils/recurring';
+import { isInitialBalanceTx } from '../utils/financial';
 
 const DataContext = createContext<DataContextValue | undefined>(undefined);
 
@@ -27,7 +28,6 @@ const CHART_COLORS = [
 ];
 
 const DEFAULT_CATEGORIES = [
-  { label: 'Uncategorized', type: 'both', color: '#64748b' },
   { label: 'Food', type: 'expense', color: '#f59e0b' },
   { label: 'Transport', type: 'expense', color: '#3b82f6' },
   { label: 'Housing', type: 'expense', color: '#ef4444' },
@@ -36,6 +36,7 @@ const DEFAULT_CATEGORIES = [
   { label: 'Salary', type: 'income', color: '#8b5cf6' },
   { label: 'Work', type: 'both', color: '#6366f1' },
   { label: 'Finance', type: 'both', color: '#14b8a6' },
+  { label: 'Uncategorized', type: 'both', color: '#64748b' },
 ];
 
 const DEFAULT_TAGS = [
@@ -45,17 +46,28 @@ const DEFAULT_TAGS = [
   { label: 'Finance' },
 ];
 
-const dedupeCategories = (cats: Category[]): Category[] => {
+export const isUncategorizedCategory = (label?: string) => (label || '').trim().toLowerCase() === 'uncategorized';
+
+export const dedupeAndSortCategories = (cats: Category[]): Category[] => {
   const seen = new Set<string>();
-  const result: Category[] = [];
+  const nonUncategorized: Category[] = [];
+  const uncategorized: Category[] = [];
   for (const c of cats) {
     const key = (c.label || '').trim().toLowerCase();
     if (key && !seen.has(key)) {
       seen.add(key);
-      result.push(c);
+      const item: Category = {
+        ...c,
+        type: c.type || 'both'
+      };
+      if (key === 'uncategorized') {
+        uncategorized.push(item);
+      } else {
+        nonUncategorized.push(item);
+      }
     }
   }
-  return result;
+  return [...nonUncategorized, ...uncategorized];
 };
 
 const sortAccounts = (accs: Account[]): Account[] => {
@@ -155,7 +167,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       const unsubCategories = onSnapshot(collection(db, `users/${uid}/categories`), (snap) => {
         const categories = snap.docs.map(d => d.data() as Category);
-        setData(prev => ({ ...prev, categories: dedupeCategories(categories) }));
+        setData(prev => ({ ...prev, categories: dedupeAndSortCategories(categories) }));
       });
 
       const unsubTags = onSnapshot(collection(db, `users/${uid}/tags`), (snap) => {
@@ -192,7 +204,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           accounts: sortAccounts(JSON.parse(localStorage.getItem(`delta_${uid}_accounts`) || '[]')),
           transactions: JSON.parse(localStorage.getItem(`delta_${uid}_transactions`) || '[]'),
           recurringTransactions: JSON.parse(localStorage.getItem(`delta_${uid}_recurring`) || '[]'),
-          categories: dedupeCategories(JSON.parse(localStorage.getItem(`delta_${uid}_categories`) || '[]')),
+          categories: dedupeAndSortCategories(JSON.parse(localStorage.getItem(`delta_${uid}_categories`) || '[]')),
           tags: JSON.parse(localStorage.getItem(`delta_${uid}_tags`) || '[]'),
           settings: JSON.parse(s)
         });
@@ -308,9 +320,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           batch.commit();
         } else {
           const existing = JSON.parse(localStorage.getItem(`delta_${uid}_categories`) || '[]');
-          const updated = [...existing, ...newCategories];
+          const updated = dedupeAndSortCategories([...existing, ...newCategories]);
           localStorage.setItem(`delta_${uid}_categories`, JSON.stringify(updated));
-          setData(prev => ({ ...prev, categories: dedupeCategories(updated) }));
+          setData(prev => ({ ...prev, categories: updated }));
         }
       }
     }
@@ -340,6 +352,66 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           setData(prev => ({ ...prev, tags: updated }));
         }
       }
+    }
+
+    // Migration: Migrate legacy initial balance transactions to account.initialBalance property
+    const legacyInitialBalanceTxs = data.transactions.filter(t => isInitialBalanceTx(t));
+    if (legacyInitialBalanceTxs.length > 0) {
+      const migrateInitialBalances = async () => {
+        const updatedAccounts: Account[] = [...data.accounts];
+        const accountInitialSums: Record<string, number> = {};
+
+        legacyInitialBalanceTxs.forEach(t => {
+          const accId = t.accountId;
+          if (accountInitialSums[accId] === undefined) {
+            accountInitialSums[accId] = 0;
+          }
+          if (t.type === 'income') {
+            accountInitialSums[accId] += t.amount;
+          } else if (t.type === 'expense') {
+            accountInitialSums[accId] -= t.amount;
+          }
+        });
+
+        let accountsModified = false;
+        const modifiedAccountList = updatedAccounts.map(acc => {
+          if (acc.initialBalance === undefined && accountInitialSums[acc.id] !== undefined) {
+            accountsModified = true;
+            return { ...acc, initialBalance: accountInitialSums[acc.id], updatedAt: now };
+          }
+          return acc;
+        });
+
+        const filteredTransactions = data.transactions.filter(t => !isInitialBalanceTx(t));
+
+        if (firebaseReady && db && user) {
+          const batch = writeBatch(db);
+          if (accountsModified) {
+            modifiedAccountList.forEach(a => {
+              if (accountInitialSums[a.id] !== undefined) {
+                batch.update(doc(db, `users/${uid}/accounts`, a.id), { initialBalance: a.initialBalance || 0, updatedAt: now });
+              }
+            });
+          }
+          legacyInitialBalanceTxs.forEach(t => {
+            batch.delete(doc(db, `users/${uid}/transactions`, t.id));
+          });
+          await batch.commit();
+        } else {
+          if (accountsModified) {
+            localStorage.setItem(`delta_${uid}_accounts`, JSON.stringify(sortAccounts(modifiedAccountList)));
+          }
+          localStorage.setItem(`delta_${uid}_transactions`, JSON.stringify(filteredTransactions));
+          setData(prev => ({
+            ...prev,
+            accounts: accountsModified ? sortAccounts(modifiedAccountList) : prev.accounts,
+            transactions: filteredTransactions
+          }));
+        }
+      };
+
+      migrateInitialBalances();
+      return;
     }
 
     // Standard auto-generator for active recurring transactions
@@ -656,14 +728,94 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateAccount = async (id: string, a: any) => {
     const now = Date.now();
+    const oldAccount = data.accounts.find((acc: any) => acc.id === id);
     const docData = cleanData({ ...a, updatedAt: now });
+
+    const nameChanged = Boolean(oldAccount && a.name && oldAccount.name.trim() !== a.name.trim());
+    const oldName = oldAccount?.name?.trim() || '';
+    const newName = a.name ? a.name.trim() : '';
+
     if (firebaseReady && db && user) {
-      await updateDoc(doc(db, `users/${user.uid}/accounts`, id), docData);
+      const batch = writeBatch(db);
+      batch.update(doc(db, `users/${user.uid}/accounts`, id), docData);
+
+      if (nameChanged && oldName && newName) {
+        // Update previous transactions referencing the account or containing its name
+        const txsToUpdate = data.transactions.filter(
+          t => (t.accountId === id || t.transferAccountId === id) &&
+               ((t.name && t.name.includes(oldName)) || (t.description && t.description.includes(oldName)))
+        );
+        txsToUpdate.forEach(t => {
+          const updatedName = t.name ? t.name.split(oldName).join(newName) : t.name;
+          const updatedDesc = t.description ? t.description.split(oldName).join(newName) : t.description;
+          batch.update(doc(db, `users/${user.uid}/transactions`, t.id), {
+            name: updatedName,
+            ...(t.description !== undefined ? { description: updatedDesc } : {}),
+            updatedAt: now
+          });
+        });
+
+        // Update recurring transactions
+        const recsToUpdate = data.recurringTransactions.filter(
+          r => (r.accountId === id || r.transferAccountId === id) &&
+               ((r.name && r.name.includes(oldName)) || (r.description && r.description.includes(oldName)))
+        );
+        recsToUpdate.forEach(r => {
+          const updatedName = r.name ? r.name.split(oldName).join(newName) : r.name;
+          const updatedDesc = r.description ? r.description.split(oldName).join(newName) : r.description;
+          batch.update(doc(db, `users/${user.uid}/recurring`, r.id), {
+            name: updatedName,
+            ...(r.description !== undefined ? { description: updatedDesc } : {}),
+            updatedAt: now
+          });
+        });
+      }
+
+      await batch.commit();
     } else if (user) {
-      const existing = JSON.parse(localStorage.getItem(`delta_${user.uid}_accounts`) || '[]');
-      const updated = sortAccounts(existing.map((item: any) => item.id === id ? { ...item, ...a, updatedAt: now } : item));
-      localStorage.setItem(`delta_${user.uid}_accounts`, JSON.stringify(updated));
-      setData(prev => ({ ...prev, accounts: updated }));
+      const existingAccounts = JSON.parse(localStorage.getItem(`delta_${user.uid}_accounts`) || '[]');
+      const updatedAccounts = sortAccounts(existingAccounts.map((item: any) => item.id === id ? { ...item, ...a, updatedAt: now } : item));
+      localStorage.setItem(`delta_${user.uid}_accounts`, JSON.stringify(updatedAccounts));
+
+      let updatedTxs = data.transactions;
+      let updatedRecs = data.recurringTransactions;
+
+      if (nameChanged && oldName && newName) {
+        const existingTxs = JSON.parse(localStorage.getItem(`delta_${user.uid}_transactions`) || '[]');
+        updatedTxs = existingTxs.map((t: any) => {
+          if ((t.accountId === id || t.transferAccountId === id) && ((t.name && t.name.includes(oldName)) || (t.description && t.description.includes(oldName)))) {
+            return {
+              ...t,
+              name: t.name ? t.name.split(oldName).join(newName) : t.name,
+              description: t.description ? t.description.split(oldName).join(newName) : t.description,
+              updatedAt: now
+            };
+          }
+          return t;
+        });
+        localStorage.setItem(`delta_${user.uid}_transactions`, JSON.stringify(updatedTxs));
+
+        const existingRecs = JSON.parse(localStorage.getItem(`delta_${user.uid}_recurring`) || '[]');
+        updatedRecs = existingRecs.map((r: any) => {
+          if ((r.accountId === id || r.transferAccountId === id) && ((r.name && r.name.includes(oldName)) || (r.description && r.description.includes(oldName)))) {
+            return {
+              ...r,
+              name: r.name ? r.name.split(oldName).join(newName) : r.name,
+              description: r.description ? r.description.split(oldName).join(newName) : r.description,
+              updatedAt: now
+            };
+          }
+          return r;
+        });
+        localStorage.setItem(`delta_${user.uid}_recurring`, JSON.stringify(updatedRecs));
+      }
+
+      setData(prev => ({ 
+        ...prev, 
+        accounts: updatedAccounts,
+        transactions: updatedTxs,
+        recurringTransactions: updatedRecs
+      }));
     }
   };
 
@@ -736,12 +888,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const id = crypto.randomUUID();
     const now = Date.now();
     const color = c.color || CHART_COLORS[data.categories.length % CHART_COLORS.length];
-    const docData = cleanData({ ...c, id, color, createdAt: now, updatedAt: now });
+    const type = c.type || 'both';
+    const docData = cleanData({ ...c, id, color, type, createdAt: now, updatedAt: now });
     if (firebaseReady && db && user) {
       await setDoc(doc(db, `users/${user.uid}/categories`, id), docData);
     } else if (user) {
       const existing = JSON.parse(localStorage.getItem(`delta_${user.uid}_categories`) || '[]');
-      const updated = [...existing, docData];
+      const updated = dedupeAndSortCategories([...existing, docData]);
       localStorage.setItem(`delta_${user.uid}_categories`, JSON.stringify(updated));
       setData(prev => ({ ...prev, categories: updated }));
     }
@@ -754,15 +907,20 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       await updateDoc(doc(db, `users/${user.uid}/categories`, id), docData);
     } else if (user) {
       const existing = JSON.parse(localStorage.getItem(`delta_${user.uid}_categories`) || '[]');
-      const updated = existing.map((item: any) => item.id === id ? { ...item, ...c, updatedAt: now } : item);
+      const updated = dedupeAndSortCategories(existing.map((item: any) => item.id === id ? { ...item, ...c, updatedAt: now } : item));
       localStorage.setItem(`delta_${user.uid}_categories`, JSON.stringify(updated));
       setData(prev => ({ ...prev, categories: updated }));
     }
   };
 
   const deleteCategory = async (id: string) => {
+    const targetCat = data.categories.find(c => c.id === id);
+    if (targetCat && isUncategorizedCategory(targetCat.label)) {
+      return; // Do not delete the fallback Uncategorized category
+    }
+
     // Reassign transactions to Uncategorized
-    const defaultCat = data.categories.find(c => c.label === 'Uncategorized');
+    const defaultCat = data.categories.find(c => isUncategorizedCategory(c.label));
     const uncategorizedId = defaultCat?.id || crypto.randomUUID();
     
     if (firebaseReady && db && user) {
@@ -783,7 +941,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const recurring = JSON.parse(localStorage.getItem(`delta_${user.uid}_recurring`) || '[]');
       const updatedRecurring = recurring.map((r: any) => r.categoryId === id ? { ...r, categoryId: uncategorizedId } : r);
       const categories = JSON.parse(localStorage.getItem(`delta_${user.uid}_categories`) || '[]');
-      const updatedCategories = categories.filter((c: any) => c.id !== id);
+      const updatedCategories = dedupeAndSortCategories(categories.filter((c: any) => c.id !== id));
       
       localStorage.setItem(`delta_${user.uid}_transactions`, JSON.stringify(updatedTransactions));
       localStorage.setItem(`delta_${user.uid}_recurring`, JSON.stringify(updatedRecurring));

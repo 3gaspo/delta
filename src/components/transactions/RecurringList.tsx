@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { RecurringTransaction } from '../../types';
 import { useData } from '../../providers/DataProvider';
 import { formatCurrency, formatDate, cn } from '../../lib/utils';
@@ -9,7 +9,7 @@ import {
 import { Modal } from '../ui/Modal';
 import { TransactionForm } from './TransactionForm';
 import { Button } from '../ui/Base';
-import { getNextPeriodDate } from '../../utils/recurring';
+import { calculateNextDueDate, sortRecurringByNextDate } from '../../utils/recurring';
 
 export function RecurringList({ 
   onAddNew,
@@ -22,6 +22,10 @@ export function RecurringList({
   const recurringTransactions = customRecurringTransactions ?? storeRecurringTransactions;
   const [editingItem, setEditingItem] = useState<RecurringTransaction | null>(null);
   const [deletingItem, setDeletingItem] = useState<RecurringTransaction | null>(null);
+
+  const sortedRecurringTransactions = useMemo(() => {
+    return sortRecurringByNextDate(recurringTransactions);
+  }, [recurringTransactions]);
 
   const getPeriodLabel = (days: number) => {
     switch (days) {
@@ -64,7 +68,7 @@ export function RecurringList({
 
   return (
     <div className="divide-y divide-black/5 dark:divide-white/5">
-      {recurringTransactions.map(rule => {
+      {sortedRecurringTransactions.map(rule => {
         const category = categories.find(c => c.id === rule.categoryId);
         const account = accounts.find(a => a.id === rule.accountId);
         const transferAccount = rule.transferAccountId ? accounts.find(a => a.id === rule.transferAccountId) : null;
@@ -73,7 +77,7 @@ export function RecurringList({
         const isTransfer = rule.type === 'transfer';
         const isActive = rule.active !== false;
 
-        const nextDueDate = getNextPeriodDate(rule.lastGeneratedDate || rule.startDate, rule.periodicityDays);
+        const nextDueDate = calculateNextDueDate(rule);
 
         return (
           <div 
@@ -200,32 +204,39 @@ export function RecurringList({
       {deletingItem && (
         <Modal isOpen={!!deletingItem} onClose={() => setDeletingItem(null)} title="Delete Recurring Transaction">
           <div className="space-y-4 py-2">
-            <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
-              <AlertCircle size={24} />
-              <p className="font-bold text-base">Delete "{deletingItem.name}"?</p>
+            <div className="flex items-center gap-3 text-red-500">
+              <div className="w-10 h-10 rounded-2xl bg-red-500/10 flex items-center justify-center shrink-0">
+                <Trash2 size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-foreground">
+                  Delete "{deletingItem.name}"?
+                </h3>
+                <p className="text-xs text-red-500 font-medium">This action cannot be undone.</p>
+              </div>
             </div>
-            <p className="text-xs opacity-70">
+            <p className="text-xs text-foreground/70 leading-relaxed">
               Would you like to keep past generated transactions in your transaction history, or remove all history associated with this recurring rule?
             </p>
-            <div className="flex flex-col gap-2 pt-2">
+            <div className="flex flex-col gap-2.5 pt-2">
               <Button 
-                variant="outline" 
+                variant="secondary" 
                 onClick={() => confirmDelete(false)}
-                className="w-full text-xs py-3"
+                className="w-full text-xs font-semibold py-3"
               >
-                Delete Rule Only (Keep History)
+                Delete Rule Only (Keep Past Transactions)
               </Button>
               <Button 
-                variant="danger" 
+                variant="destructive" 
                 onClick={() => confirmDelete(true)}
-                className="w-full text-xs py-3"
+                className="w-full text-xs font-bold py-3"
               >
                 Delete Rule & All Generated Transactions
               </Button>
               <Button 
                 variant="ghost" 
                 onClick={() => setDeletingItem(null)}
-                className="w-full text-xs py-2"
+                className="w-full text-xs font-medium py-2"
               >
                 Cancel
               </Button>

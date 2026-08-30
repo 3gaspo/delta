@@ -1,4 +1,4 @@
-import { Transaction, Account, Category, Tag } from '../types';
+import { Transaction, Account, Category, Tag, RecurringTransaction } from '../types';
 
 export function isInitialBalanceTx(t: Transaction): boolean {
   return Boolean(
@@ -8,9 +8,26 @@ export function isInitialBalanceTx(t: Transaction): boolean {
   );
 }
 
-export function getAccountBalance(accountId: string, transactions: Transaction[]): number {
-  return transactions
+export function getAccountBalance(
+  accountId: string, 
+  transactions: Transaction[],
+  accountOrInitialBalance?: Account | number | Account[]
+): number {
+  let initialOffset = 0;
+  if (typeof accountOrInitialBalance === 'number') {
+    initialOffset = accountOrInitialBalance;
+  } else if (accountOrInitialBalance && typeof accountOrInitialBalance === 'object') {
+    if ('initialBalance' in accountOrInitialBalance) {
+      initialOffset = (accountOrInitialBalance as Account).initialBalance || 0;
+    } else if (Array.isArray(accountOrInitialBalance)) {
+      const found = accountOrInitialBalance.find(a => a.id === accountId);
+      initialOffset = found?.initialBalance || 0;
+    }
+  }
+
+  const txSum = transactions
     .filter(t => t.status !== 'hidden' && (t.accountId === accountId || t.transferAccountId === accountId))
+    .filter(t => !isInitialBalanceTx(t))
     .reduce((acc, t) => {
       if (t.type === 'income') {
         return t.accountId === accountId ? acc + t.amount : acc;
@@ -22,6 +39,8 @@ export function getAccountBalance(accountId: string, transactions: Transaction[]
       }
       return acc;
     }, 0);
+
+  return initialOffset + txSum;
 }
 
 export interface FinancialTotals {
@@ -36,7 +55,7 @@ export interface FinancialTotals {
 export function computeFinancialTotals(accounts: Account[], transactions: Transaction[]): FinancialTotals {
   const visibleAccounts = accounts.filter(a => !a.hidden);
   const balances = visibleAccounts.reduce((acc, account) => {
-    acc[account.id] = getAccountBalance(account.id, transactions);
+    acc[account.id] = getAccountBalance(account.id, transactions, account);
     return acc;
   }, {} as Record<string, number>);
 
@@ -189,4 +208,82 @@ export function safeDivide(a: number, b: number): number {
   if (b === 0) return 0;
   const res = a / b;
   return isNaN(res) || !isFinite(res) ? 0 : res;
+}
+
+export function getMonthlyEquivalent(amount: number, periodicityDays?: number): number {
+  if (!amount || isNaN(amount)) return 0;
+  if (!periodicityDays || periodicityDays <= 0 || periodicityDays === 30) return amount;
+  if (periodicityDays === 7) return (amount * 52) / 12;
+  if (periodicityDays === 14) return (amount * 26) / 12;
+  if (periodicityDays === 90) return amount / 3;
+  if (periodicityDays === 365) return amount / 12;
+  return (amount * 365) / (12 * periodicityDays);
+}
+
+export interface ExpectedFinancials {
+  expectedGains: number;
+  expectedExpenses: number;
+  expectedDelta: number;
+}
+
+export function computeExpectedMonthlyFinancials(
+  recurringTransactions: RecurringTransaction[],
+  categories: Category[]
+): ExpectedFinancials {
+  const activeRecurring = (recurringTransactions || []).filter(r => r.active !== false);
+
+  // 1. Expected Gains from recurring income
+  let expectedGains = activeRecurring
+    .filter(r => r.type === 'income')
+    .reduce((sum, r) => sum + getMonthlyEquivalent(r.amount, r.periodicityDays), 0);
+
+  // Add income categories if they have a budget limit higher than recurring income assigned
+  const incomeCategories = (categories || []).filter(c => c.type === 'income' && (c.budgetLimit || 0) > 0);
+  incomeCategories.forEach(cat => {
+    const recurringInCat = activeRecurring
+      .filter(r => r.type === 'income' && r.categoryId === cat.id)
+      .reduce((sum, r) => sum + getMonthlyEquivalent(r.amount, r.periodicityDays), 0);
+    const catBudget = cat.budgetLimit || 0;
+    if (catBudget > recurringInCat) {
+      expectedGains += (catBudget - recurringInCat);
+    }
+  });
+
+  // 2. Expected Expenses from recurring expenses + category budgets
+  const recurringExpensesByCat = new Map<string, number>();
+  let unassignedRecurringExpenses = 0;
+
+  activeRecurring
+    .filter(r => r.type === 'expense')
+    .forEach(r => {
+      const monthly = getMonthlyEquivalent(r.amount, r.periodicityDays);
+      if (r.categoryId) {
+        recurringExpensesByCat.set(r.categoryId, (recurringExpensesByCat.get(r.categoryId) || 0) + monthly);
+      } else {
+        unassignedRecurringExpenses += monthly;
+      }
+    });
+
+  let expectedExpenses = unassignedRecurringExpenses;
+
+  // Track all expense categories (from categories array or recurring expense tags)
+  const allExpenseCategoryIds = new Set([
+    ...(categories || []).filter(c => c.type !== 'income').map(c => c.id),
+    ...Array.from(recurringExpensesByCat.keys())
+  ]);
+
+  allExpenseCategoryIds.forEach(catId => {
+    const cat = (categories || []).find(c => c.id === catId);
+    const catBudget = (cat && cat.type !== 'income') ? (cat.budgetLimit || 0) : 0;
+    const recurringInCat = recurringExpensesByCat.get(catId) || 0;
+    expectedExpenses += Math.max(catBudget, recurringInCat);
+  });
+
+  const expectedDelta = expectedGains - expectedExpenses;
+
+  return {
+    expectedGains,
+    expectedExpenses,
+    expectedDelta
+  };
 }

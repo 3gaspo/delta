@@ -16,6 +16,7 @@ interface TransactionFormProps {
   initialData?: Transaction;
   initialRecurringData?: RecurringTransaction;
   defaultMode?: FormTabMode;
+  allowedModes?: FormTabMode[];
 }
 
 interface SubTransactionItem {
@@ -28,7 +29,7 @@ interface SubTransactionItem {
   description: string;
 }
 
-export function TransactionForm({ onClose, initialData, initialRecurringData, defaultMode }: TransactionFormProps) {
+export function TransactionForm({ onClose, initialData, initialRecurringData, defaultMode, allowedModes }: TransactionFormProps) {
   const { 
     accounts, categories, tags, transactions, settings,
     addTransaction, updateTransaction, deleteTransaction,
@@ -36,18 +37,42 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
     addRecurringTransaction, updateRecurringTransaction, deleteRecurringTransaction, addTag 
   } = useData();
 
-  // Deduplicate categories by label
+  const activeModes = useMemo<FormTabMode[]>(() => {
+    if (allowedModes && allowedModes.length > 0) return allowedModes;
+    if (initialRecurringData) return ['subscription', 'transfer'];
+    if (initialData) return ['single', 'group', 'transfer'];
+    return ['single', 'group', 'transfer', 'subscription'];
+  }, [allowedModes, initialRecurringData, initialData]);
+
+  const isRecurringContext = useMemo(() => {
+    if (initialRecurringData) return true;
+    if (allowedModes) {
+      return allowedModes.includes('subscription') && !allowedModes.includes('single');
+    }
+    return false;
+  }, [initialRecurringData, allowedModes]);
+
+  // Deduplicate categories by label with Uncategorized always at the end
   const availableCategories = useMemo(() => {
     const seen = new Set<string>();
-    const list: Category[] = [];
+    const nonUncategorized: Category[] = [];
+    const uncategorized: Category[] = [];
     for (const c of categories) {
       const key = (c.label || '').trim().toLowerCase();
       if (key && !seen.has(key)) {
         seen.add(key);
-        list.push(c);
+        const item: Category = {
+          ...c,
+          type: c.type || 'both'
+        };
+        if (key === 'uncategorized') {
+          uncategorized.push(item);
+        } else {
+          nonUncategorized.push(item);
+        }
       }
     }
-    return list;
+    return [...nonUncategorized, ...uncategorized];
   }, [categories]);
 
   // Find existing group transactions if initialData belongs to a group
@@ -60,7 +85,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
 
   // Determine initial mode based on initialData or initialRecurringData
   const initialMode = useMemo<FormTabMode>(() => {
-    if (defaultMode) return defaultMode;
+    if (defaultMode && activeModes.includes(defaultMode)) return defaultMode;
     if (initialRecurringData) {
       return initialRecurringData.type === 'transfer' ? 'transfer' : 'subscription';
     }
@@ -69,8 +94,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
     if (initialData?.type === 'subscription' || (initialData?.periodicityDays && initialData.periodicityDays > 0)) {
       return 'subscription';
     }
-    return 'single';
-  }, [defaultMode, initialRecurringData, initialData, existingGroupSubtransactions]);
+    return activeModes[0] || 'single';
+  }, [defaultMode, activeModes, initialRecurringData, initialData, existingGroupSubtransactions]);
 
   const [mode, setMode] = useState<FormTabMode>(initialMode);
 
@@ -90,7 +115,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
   const rawDate = initialRecurringData?.startDate ?? initialData?.date;
   const initialDateStr = rawDate 
     ? new Date(rawDate).toISOString().split('T')[0] 
-    : (initialMode === 'subscription' ? tomorrowStr : new Date().toISOString().split('T')[0]);
+    : ((initialMode === 'subscription' || isRecurringContext) ? tomorrowStr : new Date().toISOString().split('T')[0]);
   const rawAccId = initialRecurringData?.accountId ?? initialData?.accountId ?? accounts[0]?.id ?? '';
   const rawCatId = initialRecurringData?.categoryId ?? initialData?.categoryId ?? availableCategories.find(c => c.label === 'Uncategorized')?.id ?? availableCategories[0]?.id ?? '';
   const rawTagIds = initialRecurringData?.tagIds ?? initialData?.tagIds ?? [];
@@ -135,6 +160,9 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
         return initialP.toString();
       }
       return 'custom';
+    }
+    if (isRecurringContext) {
+      return '30'; // Default monthly for recurring transfer
     }
     return '0'; // Default one-time for transfer
   });
@@ -448,84 +476,102 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
         </div>
       )}
 
-      {/* 4-Tab Mode Selector (Icon-only bar with generous click targets and titles) */}
-      <div className="grid grid-cols-4 bg-black/5 dark:bg-white/5 p-1.5 rounded-2xl gap-1.5" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'single'}
-          title="Single Transaction"
-          onClick={() => setMode('single')}
+      {/* Dynamic Tab Mode Selector */}
+      {activeModes.length > 1 && (
+        <div 
           className={cn(
-            "py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
-            mode === 'single'
-              ? "bg-white dark:bg-black text-foreground shadow-sm ring-1 ring-black/5 dark:ring-white/10"
-              : "opacity-40 hover:opacity-100 text-foreground"
-          )}
+            "grid bg-black/5 dark:bg-white/5 p-1.5 rounded-2xl gap-1.5",
+            activeModes.length === 2 ? "grid-cols-2" : 
+            activeModes.length === 3 ? "grid-cols-3" : 
+            activeModes.length === 4 ? "grid-cols-4" : "grid-cols-1"
+          )} 
+          role="tablist"
         >
-          <Receipt size={18} />
-        </button>
-
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'group'}
-          title="Group Transaction"
-          onClick={() => setMode('group')}
-          className={cn(
-            "py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
-            mode === 'group'
-              ? "bg-purple-600 text-white shadow-sm"
-              : "opacity-40 hover:opacity-100 text-foreground"
+          {activeModes.includes('single') && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'single'}
+              title="Single Transaction"
+              onClick={() => setMode('single')}
+              className={cn(
+                "py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
+                mode === 'single'
+                  ? "bg-white dark:bg-black text-foreground shadow-sm ring-1 ring-black/5 dark:ring-white/10"
+                  : "opacity-40 hover:opacity-100 text-foreground"
+              )}
+            >
+              <Receipt size={18} />
+            </button>
           )}
-        >
-          <Layers3 size={18} />
-        </button>
 
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'transfer'}
-          title="Account Transfer"
-          onClick={() => setMode('transfer')}
-          className={cn(
-            "py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
-            mode === 'transfer'
-              ? "bg-blue-600 text-white shadow-sm"
-              : "opacity-40 hover:opacity-100 text-foreground"
+          {activeModes.includes('group') && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'group'}
+              title="Group Transaction"
+              onClick={() => setMode('group')}
+              className={cn(
+                "py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
+                mode === 'group'
+                  ? "bg-purple-600 text-white shadow-sm"
+                  : "opacity-40 hover:opacity-100 text-foreground"
+              )}
+            >
+              <Layers3 size={18} />
+            </button>
           )}
-        >
-          <ArrowRightLeft size={18} />
-        </button>
 
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'subscription'}
-          title="Recurring Subscription"
-          onClick={() => {
-            setMode('subscription');
-            // If date is today or past, bump to tomorrow automatically for user convenience
-            const curDate = new Date(formData.date);
-            const tomorrow = new Date();
-            tomorrow.setHours(0, 0, 0, 0);
-            tomorrow.setDate(tomorrow.getDate() + 1);
-            if (isNaN(curDate.getTime()) || curDate.getTime() < tomorrow.getTime()) {
-              setFormData(prev => ({ ...prev, date: tomorrowStr }));
-            }
-          }}
-          className={cn(
-            "py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
-            mode === 'subscription'
-              ? "bg-amber-600 text-white shadow-sm"
-              : "opacity-40 hover:opacity-100 text-foreground"
+          {activeModes.includes('transfer') && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'transfer'}
+              title={isRecurringContext ? "Recurring Transfer" : "Account Transfer"}
+              onClick={() => setMode('transfer')}
+              className={cn(
+                "py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
+                mode === 'transfer'
+                  ? "bg-blue-600 text-white shadow-sm"
+                  : "opacity-40 hover:opacity-100 text-foreground"
+              )}
+            >
+              <ArrowRightLeft size={18} />
+            </button>
           )}
-        >
-          <Repeat size={18} />
-        </button>
-      </div>
 
-      {/* Active Tab Banner Title (No description as requested) */}
+          {activeModes.includes('subscription') && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'subscription'}
+              title="Recurring Transaction"
+              onClick={() => {
+                setMode('subscription');
+                // If date is today or past, bump to tomorrow automatically for user convenience
+                const curDate = new Date(formData.date);
+                const tomorrow = new Date();
+                tomorrow.setHours(0, 0, 0, 0);
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                if (isNaN(curDate.getTime()) || curDate.getTime() < tomorrow.getTime()) {
+                  setFormData(prev => ({ ...prev, date: tomorrowStr }));
+                }
+              }}
+              className={cn(
+                "py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
+                mode === 'subscription'
+                  ? "bg-amber-600 text-white shadow-sm"
+                  : "opacity-40 hover:opacity-100 text-foreground"
+              )}
+            >
+              <Repeat size={18} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Active Tab Banner Title */}
       {mode === 'single' && (
         <div className="flex items-center gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-2xl">
           <div className="w-9 h-9 rounded-xl bg-white dark:bg-black/40 flex items-center justify-center shadow-xs shrink-0 text-foreground">
@@ -549,7 +595,9 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
           <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
             <ArrowRightLeft size={18} />
           </div>
-          <h3 className="text-sm font-bold text-blue-700 dark:text-blue-300">Account Transfer</h3>
+          <h3 className="text-sm font-bold text-blue-700 dark:text-blue-300">
+            {isRecurringContext ? 'Recurring Transfer' : 'Account Transfer'}
+          </h3>
         </div>
       )}
 
@@ -683,7 +731,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                   required
                 >
                   {availableCategories
-                    .filter(c => (c.type === 'both' || c.type === formData.type))
+                    .filter(c => (!c.type || c.type === 'both' || c.type === formData.type))
                     .map(c => (
                       <option key={c.id} value={c.id}>{c.label}</option>
                     ))}
@@ -858,7 +906,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                         required
                       >
                         {availableCategories
-                          .filter(c => (c.type === 'both' || c.type === st.type))
+                          .filter(c => (!c.type || c.type === 'both' || c.type === st.type))
                           .map(c => (
                             <option key={c.id} value={c.id}>{c.label}</option>
                           ))}
@@ -963,61 +1011,73 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
               </label>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {isRecurringContext ? (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <label className="block">
+                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
+                      Start Date (Starts Tomorrow or Later)
+                    </span>
+                    <Input 
+                      type="date" 
+                      icon={Calendar}
+                      value={formData.date}
+                      min={tomorrowStr}
+                      onChange={e => setFormData({ ...formData, date: e.target.value })}
+                      required
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Transfer Periodicity</span>
+                    <Select 
+                      icon={Repeat}
+                      value={transferPeriodicity}
+                      onChange={e => {
+                        const newPeriod = e.target.value;
+                        setTransferPeriodicity(newPeriod);
+                        const curDate = new Date(formData.date);
+                        const tomorrow = new Date();
+                        tomorrow.setHours(0, 0, 0, 0);
+                        tomorrow.setDate(tomorrow.getDate() + 1);
+                        if (isNaN(curDate.getTime()) || curDate.getTime() < tomorrow.getTime()) {
+                          setFormData(prev => ({ ...prev, date: tomorrowStr }));
+                        }
+                      }}
+                    >
+                      <option value="7">Every 7 days (Weekly)</option>
+                      <option value="14">Every 14 days (Bi-weekly)</option>
+                      <option value="30">Every 30 days (Monthly)</option>
+                      <option value="90">Every 90 days (Quarterly)</option>
+                      <option value="365">Every 365 days (Yearly)</option>
+                      <option value="custom">Custom interval in days...</option>
+                    </Select>
+                  </label>
+                </div>
+
+                {transferPeriodicity === 'custom' && (
+                  <label className="block">
+                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Repeat Every (Days)</span>
+                    <Input 
+                      type="number"
+                      icon={Repeat}
+                      placeholder="e.g. 15"
+                      value={customPeriod}
+                      onChange={e => setCustomPeriod(e.target.value)}
+                      min="1"
+                      required
+                    />
+                  </label>
+                )}
+              </>
+            ) : (
               <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
-                  Start Date {transferPeriodicity !== '0' ? '(Starts Tomorrow or Later)' : ''}
-                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Date</span>
                 <Input 
                   type="date" 
                   icon={Calendar}
                   value={formData.date}
-                  min={transferPeriodicity !== '0' ? tomorrowStr : undefined}
                   onChange={e => setFormData({ ...formData, date: e.target.value })}
-                  required
-                />
-              </label>
-
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Optional Periodicity</span>
-                <Select 
-                  icon={Repeat}
-                  value={transferPeriodicity}
-                  onChange={e => {
-                    const newPeriod = e.target.value;
-                    setTransferPeriodicity(newPeriod);
-                    if (newPeriod !== '0') {
-                      const curDate = new Date(formData.date);
-                      const tomorrow = new Date();
-                      tomorrow.setHours(0, 0, 0, 0);
-                      tomorrow.setDate(tomorrow.getDate() + 1);
-                      if (isNaN(curDate.getTime()) || curDate.getTime() < tomorrow.getTime()) {
-                        setFormData(prev => ({ ...prev, date: tomorrowStr }));
-                      }
-                    }
-                  }}
-                >
-                  <option value="0">One-time (No repeat)</option>
-                  <option value="7">Every 7 days (Weekly)</option>
-                  <option value="14">Every 14 days (Bi-weekly)</option>
-                  <option value="30">Every 30 days (Monthly)</option>
-                  <option value="90">Every 90 days (Quarterly)</option>
-                  <option value="365">Every 365 days (Yearly)</option>
-                  <option value="custom">Custom interval in days...</option>
-                </Select>
-              </label>
-            </div>
-
-            {transferPeriodicity === 'custom' && (
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Repeat Every (Days)</span>
-                <Input 
-                  type="number"
-                  icon={Repeat}
-                  placeholder="e.g. 15"
-                  value={customPeriod}
-                  onChange={e => setCustomPeriod(e.target.value)}
-                  min="1"
                   required
                 />
               </label>
@@ -1199,7 +1259,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                   required
                 >
                   {availableCategories
-                    .filter(c => (c.type === 'both' || c.type === subscriptionType))
+                    .filter(c => (!c.type || c.type === 'both' || c.type === subscriptionType))
                     .map(c => (
                       <option key={c.id} value={c.id}>{c.label}</option>
                     ))}
@@ -1250,9 +1310,11 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
           : mode === 'group' 
             ? 'Save Group Transaction' 
             : mode === 'transfer'
-              ? (initialData ? 'Update Transfer' : 'Execute Transfer')
+              ? (isRecurringContext
+                  ? (initialRecurringData ? 'Update Recurring Transfer' : 'Create Recurring Transfer')
+                  : (initialData ? 'Update Transfer' : 'Execute Transfer'))
               : mode === 'subscription'
-                ? (initialData ? 'Update Subscription' : 'Create Subscription')
+                ? (initialRecurringData ? 'Update Recurring Rule' : 'Create Recurring Rule')
                 : (initialData ? 'Update Transaction' : 'Record Transaction')}
       </Button>
     </form>

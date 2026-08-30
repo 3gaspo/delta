@@ -259,7 +259,7 @@ export function Select({
             role="listbox"
             className={cn(
               "absolute left-0 right-0 top-full mt-2 z-[150]",
-              "bg-card/95 dark:bg-[#18181b]/95 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-2xl",
+              "bg-white/95 dark:bg-neutral-900/95 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-2xl",
               "rounded-2xl p-1.5 max-h-60 overflow-y-auto custom-scrollbar"
             )}
           >

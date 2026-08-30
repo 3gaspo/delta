@@ -6,6 +6,7 @@ export interface Account {
   name: string;
   type: AccountType;
   debtDirection?: DebtDirection;
+  initialBalance?: number;
   createdAt: number;
   updatedAt: number;
   archived?: boolean;

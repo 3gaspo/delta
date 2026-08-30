@@ -9,13 +9,13 @@ import {
 } from 'recharts';
 import { formatCurrency, cn } from '../lib/utils';
 import { TransactionType } from '../types';
-import { isInitialBalanceTx } from '../utils/financial';
+import { isInitialBalanceTx, getAccountBalance } from '../utils/financial';
 import { 
   startOfMonth, endOfMonth, format, eachMonthOfInterval, 
   startOfYear, startOfWeek, endOfWeek,
   eachWeekOfInterval
 } from 'date-fns';
-import { PiggyBank } from 'lucide-react';
+import { PiggyBank, PieChart as LucidePieChart } from 'lucide-react';
 
 export default function Stats() {
   const { transactions, categories, tags, accounts, settings, loading } = useData();
@@ -68,40 +68,11 @@ export default function Stats() {
       // Calculate total balance of all selected accounts
       currentRunningBalance = accounts
         .filter(a => includeDebts || a.type !== 'debt')
-        .reduce((sum, a) => {
-          const accTrans = transactions.filter(t => (t.accountId === a.id || t.transferAccountId === a.id) && t.status !== 'hidden');
-          const bal = accTrans.reduce((s, t) => {
-            const isSource = t.accountId === a.id;
-            const isDest = t.transferAccountId === a.id;
-            if (t.type === 'transfer') {
-              if (isSource) return s - t.amount;
-              if (isDest) return s + t.amount;
-            } else if (t.type === 'income') {
-              return s + t.amount;
-            } else {
-              return s - t.amount;
-            }
-            return s;
-          }, 0);
-          return sum + bal;
-        }, 0);
+        .reduce((sum, a) => sum + getAccountBalance(a.id, transactions, a), 0);
     } else {
       const a = accounts.find(acc => acc.id === balanceAccountId);
       if (a) {
-        const accTrans = transactions.filter(t => (t.accountId === a.id || t.transferAccountId === a.id) && t.status !== 'hidden');
-        currentRunningBalance = accTrans.reduce((s, t) => {
-          const isSource = t.accountId === a.id;
-          const isDest = t.transferAccountId === a.id;
-          if (t.type === 'transfer') {
-            if (isSource) return s - t.amount;
-            if (isDest) return s + t.amount;
-          } else if (t.type === 'income') {
-            return s + t.amount;
-          } else {
-            return s - t.amount;
-          }
-          return s;
-        }, 0);
+        currentRunningBalance = getAccountBalance(a.id, transactions, a);
       }
     }
 
@@ -264,7 +235,7 @@ export default function Stats() {
         {/* Global Filters */}
         <header>
           <div className="flex flex-col gap-3 p-6 bg-black/5 dark:bg-white/5 rounded-[32px] border border-black/5 dark:border-white/5">
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40">Filter Analytics</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-40">Filter Analytics</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Select 
                 value={globalFilterId} 
@@ -281,28 +252,31 @@ export default function Stats() {
               </Select>
 
               <button 
+                type="button"
                 onClick={() => setIncludeDebts(!includeDebts)}
                 className={cn(
-                  "flex items-center justify-center gap-2 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all border",
-                  includeDebts ? "bg-background text-foreground border-black/10" : "bg-red-500 text-white border-transparent"
+                  "flex items-center justify-center gap-2 px-6 py-3 rounded-2xl text-xs font-bold uppercase tracking-wider transition-all border cursor-pointer",
+                  includeDebts 
+                    ? "bg-black/5 dark:bg-white/10 text-foreground border-black/10 dark:border-white/10" 
+                    : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
                 )}
               >
                 <PiggyBank size={16} />
-                {includeDebts ? "Debts On" : "Debts Off"}
+                {includeDebts ? "Debts Included" : "Debts Excluded"}
               </button>
             </div>
           </div>
         </header>
 
         {/* 1. Account Evolution */}
-        <section className="space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <h2 className="text-xl font-black uppercase tracking-tight">Account Evolution</h2>
-            <div className="flex gap-2 overflow-x-auto pb-2 -mb-2 md:overflow-visible">
+        <section className="space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 px-1">
+            <h2 className="text-lg font-bold tracking-tight">Account Evolution</h2>
+            <div className="flex gap-2 overflow-x-auto pb-1 -mb-1 md:overflow-visible">
               <Select 
                 value={balancePeriod} 
                 onChange={(e) => setBalancePeriod(e.target.value as any)} 
-                className="h-9 py-0 px-4 text-[10px] w-28 flex-shrink-0 rounded-full"
+                className="h-10 py-0 px-3 text-xs w-32 flex-shrink-0"
               >
                 <option value="weekly">Weekly</option>
                 <option value="monthly">Monthly</option>
@@ -310,7 +284,7 @@ export default function Stats() {
               <Select 
                 value={balanceAccountId} 
                 onChange={(e) => setBalanceAccountId(e.target.value)} 
-                className="h-9 py-0 px-4 text-[10px] w-32 rounded-full"
+                className="h-10 py-0 px-3 text-xs w-36"
               >
                 <option value="all">All Accounts</option>
                 {accounts?.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
@@ -322,7 +296,7 @@ export default function Stats() {
               <AreaChart data={stats.balanceData}>
                 <defs>
                   <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="currentColor" stopOpacity={0.1}/>
+                    <stop offset="5%" stopColor="currentColor" stopOpacity={0.15}/>
                     <stop offset="95%" stopColor="currentColor" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
@@ -331,12 +305,12 @@ export default function Stats() {
                 <YAxis hide domain={['auto', 'auto']} />
                 <Tooltip 
                   contentStyle={{ 
-                    borderRadius: '24px', 
-                    border: 'none', 
+                    borderRadius: '20px', 
+                    border: '1px solid rgba(128,128,128,0.15)', 
                     boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
                     backgroundColor: 'var(--background)',
                     color: 'var(--foreground)',
-                    padding: '16px'
+                    padding: '12px 16px'
                   }}
                   itemStyle={{ color: 'var(--foreground)', fontWeight: 'bold' }}
                   formatter={(value: any) => [formatCurrency(value, settings.currency), 'Balance']}
@@ -348,14 +322,14 @@ export default function Stats() {
         </section>
 
         {/* 2. Cash Flow */}
-        <section className="space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <h2 className="text-xl font-black uppercase tracking-tight">Cash Flow</h2>
-            <div className="flex gap-2 overflow-x-auto pb-2 -mb-2 md:overflow-visible">
+        <section className="space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 px-1">
+            <h2 className="text-lg font-bold tracking-tight">Cash Flow</h2>
+            <div className="flex gap-2 overflow-x-auto pb-1 -mb-1 md:overflow-visible">
               <Select 
                 value={flowPeriod} 
                 onChange={(e) => setFlowPeriod(e.target.value as any)} 
-                className="h-9 py-0 px-4 text-[10px] w-28 flex-shrink-0 rounded-full"
+                className="h-10 py-0 px-3 text-xs w-32 flex-shrink-0"
               >
                 <option value="weekly">Weekly</option>
                 <option value="monthly">Monthly</option>
@@ -363,7 +337,7 @@ export default function Stats() {
               <Select 
                 value={flowTypeFilter} 
                 onChange={(e) => setFlowTypeFilter(e.target.value as any)} 
-                className="h-9 py-0 px-4 text-[10px] w-32 rounded-full"
+                className="h-10 py-0 px-3 text-xs w-36"
               >
                 <option value="all">All Types</option>
                 <option value="expense">Expenses</option>
@@ -373,13 +347,13 @@ export default function Stats() {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="p-6 bg-red-500/5 border border-red-500/10 rounded-[32px] text-center">
-              <p className="text-[10px] font-black uppercase text-red-500 mb-1 tracking-widest opacity-40">Expenses</p>
-              <p className="text-2xl font-black text-red-500">{formatCurrency(stats.totalExpenses, settings.currency)}</p>
+            <div className="p-5 bg-red-500/5 border border-red-500/10 rounded-2xl text-center">
+              <p className="text-[10px] font-bold uppercase text-red-500 mb-1 tracking-widest opacity-60">Expenses</p>
+              <p className="text-2xl font-bold text-red-500 tracking-tight">{formatCurrency(stats.totalExpenses, settings.currency)}</p>
             </div>
-            <div className="p-6 bg-emerald-500/5 border border-emerald-500/10 rounded-[32px] text-center">
-              <p className="text-[10px] font-black uppercase text-emerald-500 mb-1 tracking-widest opacity-40">Income</p>
-              <p className="text-2xl font-black text-emerald-500">{formatCurrency(stats.totalIncome, settings.currency)}</p>
+            <div className="p-5 bg-emerald-500/5 border border-emerald-500/10 rounded-2xl text-center">
+              <p className="text-[10px] font-bold uppercase text-emerald-500 mb-1 tracking-widest opacity-60">Income</p>
+              <p className="text-2xl font-bold text-emerald-500 tracking-tight">{formatCurrency(stats.totalIncome, settings.currency)}</p>
             </div>
           </div>
           <Card className="h-[300px] p-6">
@@ -391,12 +365,12 @@ export default function Stats() {
                 <Tooltip 
                   cursor={{ fill: 'currentColor', fillOpacity: 0.05 }}
                   contentStyle={{ 
-                    borderRadius: '24px', 
-                    border: 'none', 
+                    borderRadius: '20px', 
+                    border: '1px solid rgba(128,128,128,0.15)', 
                     boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
                     backgroundColor: 'var(--background)',
                     color: 'var(--foreground)',
-                    padding: '16px'
+                    padding: '12px 16px'
                   }}
                   itemStyle={{ color: 'var(--foreground)', fontWeight: 'bold' }}
                   formatter={(value: any) => [formatCurrency(value, settings.currency), 'Amount']}
@@ -409,20 +383,22 @@ export default function Stats() {
         </section>
 
         {/* 3. By Category */}
-        <section className="space-y-6">
-          <h2 className="text-xl font-black uppercase tracking-tight">By Category</h2>
+        <section className="space-y-4">
+          <div className="px-1">
+            <h2 className="text-lg font-bold tracking-tight">By Category</h2>
+          </div>
           <Card className="p-0 overflow-hidden">
             <div className="flex flex-col lg:flex-row">
               {/* Chart Side */}
               <div className="p-8 border-b lg:border-b-0 lg:border-r border-black/5 dark:border-white/5 flex flex-col items-center justify-center bg-black/[0.02] dark:bg-white/[0.02] lg:w-1/2">
-                <div className="w-full max-w-[300px] aspect-square">
+                <div className="w-full max-w-[280px] aspect-square">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={stats.categoryTotals}
                         innerRadius="65%"
                         outerRadius="90%"
-                        paddingAngle={8}
+                        paddingAngle={6}
                         dataKey="value"
                         stroke="none"
                       >
@@ -432,12 +408,12 @@ export default function Stats() {
                       </Pie>
                       <Tooltip 
                         contentStyle={{ 
-                          borderRadius: '24px', 
-                          border: 'none', 
+                          borderRadius: '20px', 
+                          border: '1px solid rgba(128,128,128,0.15)', 
                           boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
                           backgroundColor: 'var(--background)',
                           color: 'var(--foreground)',
-                          padding: '16px'
+                          padding: '12px 16px'
                         }}
                         itemStyle={{ color: 'var(--foreground)', fontWeight: 'bold' }}
                         formatter={(value: any) => [formatCurrency(value, settings.currency), 'Spent']}
@@ -445,45 +421,45 @@ export default function Stats() {
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="text-center mt-6">
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-30">Monthly Distribution</p>
-                  <p className="text-xs font-bold opacity-60 mt-1">{stats.categoryTotals.length} Active Categories</p>
+                <div className="text-center mt-4">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-40">Monthly Distribution</p>
+                  <p className="text-xs font-semibold opacity-70 mt-1">{stats.categoryTotals.length} Active Categories</p>
                 </div>
               </div>
 
               {/* List Side */}
-              <div className="p-8 flex flex-col min-h-[400px] lg:w-1/2">
-                <div className="flex items-center justify-between mb-8 pb-4 border-b border-black/5 dark:border-white/5 shrink-0">
-                  <p className="text-[10px] font-black uppercase tracking-widest opacity-40">Monthly Budget Progress</p>
+              <div className="p-6 sm:p-8 flex flex-col min-h-[380px] lg:w-1/2">
+                <div className="flex items-center justify-between mb-6 pb-3 border-b border-black/5 dark:border-white/5 shrink-0">
+                  <p className="text-[10px] font-bold uppercase tracking-widest opacity-40">Monthly Budget Progress</p>
                 </div>
                 <div className="flex-1 overflow-y-auto pr-2 -mr-2 custom-scrollbar">
-                  <div className="space-y-8">
+                  <div className="space-y-6">
                     {stats.categoryTotals.map((cat, i) => (
-                      <div key={`${cat.name}-${i}`} className="space-y-3 group">
-                        <div className="flex justify-between items-end text-[10px] font-black uppercase tracking-widest">
-                          <div className="flex items-center gap-3">
-                            <div className="w-3 h-3 rounded-full shadow-sm shrink-0" style={{ backgroundColor: cat.color }} />
+                      <div key={`${cat.name}-${i}`} className="space-y-2.5 group">
+                        <div className="flex justify-between items-end text-[10px] font-bold uppercase tracking-wider">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-2.5 h-2.5 rounded-full shadow-xs shrink-0" style={{ backgroundColor: cat.color }} />
                             <div className="flex flex-col gap-0.5">
-                               <span className="opacity-90 truncate max-w-[200px]">{cat.name}</span>
-                               <span className="text-[8px] opacity-30 font-bold">Current Month</span>
+                               <span className="opacity-90 truncate max-w-[180px] font-bold">{cat.name}</span>
+                               <span className="text-[8px] opacity-40 font-semibold">Current Month</span>
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-0.5">
-                            <span className={cn("text-[11px] font-black", cat.value > cat.budget && cat.budget > 0 ? "text-red-500" : "")}>
+                            <span className={cn("text-[11px] font-bold", cat.value > cat.budget && cat.budget > 0 ? "text-red-500" : "")}>
                               {formatCurrency(cat.value, settings.currency)}
                             </span>
                             {cat.budget > 0 && (
-                              <span className="text-[9px] opacity-30">
+                              <span className="text-[9px] opacity-40">
                                 / {formatCurrency(cat.budget, settings.currency)}
                               </span>
                             )}
                           </div>
                         </div>
-                        <div className="h-2.5 w-full bg-black/5 dark:bg-white/5 rounded-full overflow-hidden">
+                        <div className="h-2 w-full bg-black/5 dark:bg-white/5 rounded-full overflow-hidden">
                           <div 
                             className={cn(
                               "h-full rounded-full transition-all duration-1000 ease-out",
-                              cat.value > cat.budget && cat.budget > 0 ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]" : "shadow-sm"
+                              cat.value > cat.budget && cat.budget > 0 ? "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.4)]" : "shadow-xs"
                             )}
                             style={{ 
                               width: `${(cat.budget > 0 && !isNaN(cat.value)) ? Math.min((cat.value / cat.budget) * 100, 100) : (!isNaN(cat.value) && cat.value > 0 ? 100 : 0)}%`,
@@ -494,9 +470,10 @@ export default function Stats() {
                       </div>
                     ))}
                     {stats.categoryTotals.length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-20 opacity-20 italic">
-                        <p className="text-sm font-bold uppercase tracking-widest">No Category Data</p>
-                        <p className="text-[10px] mt-1">Start tagging your expenses to see insights</p>
+                      <div className="flex flex-col items-center justify-center py-16 opacity-30 text-center">
+                        <LucidePieChart size={32} strokeWidth={1.5} className="mb-2" />
+                        <p className="text-xs font-bold uppercase tracking-widest">No Category Data</p>
+                        <p className="text-[10px] opacity-60 mt-0.5">Add transactions with categories to see insights</p>
                       </div>
                     )}
                   </div>

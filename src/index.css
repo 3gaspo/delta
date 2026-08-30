@@ -5,6 +5,7 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card);
 }
 
 @variant dark (&:where(.dark, .dark *));
@@ -12,18 +13,20 @@
 :root {
   --background: #ffffff;
   --foreground: #000000;
+  --card: #ffffff;
   color-scheme: light;
 }
 
 .dark {
   --background: #000000;
   --foreground: #ffffff;
+  --card: #18181b;
   color-scheme: dark;
 }
 
 @layer base {
   body {
-    @apply font-sans antialiased bg-background text-foreground transition-colors duration-300;
+    @apply font-sans antialiased bg-background text-foreground transition-colors duration-200 selection:bg-black/10 dark:selection:bg-white/10;
   }
 
   select option {
@@ -32,13 +35,14 @@
 }
 
 .custom-scrollbar::-webkit-scrollbar {
-  width: 4px;
+  width: 5px;
+  height: 5px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
   @apply bg-transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  @apply bg-foreground/10 rounded-full;
+  @apply bg-foreground/15 hover:bg-foreground/25 rounded-full transition-colors;
 }
 
 .pb-safe {

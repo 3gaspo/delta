@@ -114,7 +114,7 @@ export function AccountReorderModal({ isOpen, onClose }: AccountReorderModalProp
     totalCount: number, 
     listType: 'regular' | 'debt'
   ) => {
-    const balance = getAccountBalance(account.id, transactions);
+    const balance = getAccountBalance(account.id, transactions, account);
     const isDebt = account.type === 'debt';
     const isReceivable = account.debtDirection === 'receivable';
     const isDragging = draggedItemId === account.id;

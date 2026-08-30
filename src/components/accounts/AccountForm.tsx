@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useData } from '../../providers/DataProvider';
 import { Account, AccountType, DebtDirection } from '../../types';
 import { Button, Input, Select } from '../ui/Base';
-import { Landmark, Archive, Wallet, EyeOff, AlertCircle, Trash2 } from 'lucide-react';
-import { getAccountBalance } from '../../utils/financial';
-import { parseMoney } from '../../lib/utils';
+import { Landmark, Archive, Wallet, EyeOff, AlertCircle, Trash2, Calculator } from 'lucide-react';
+import { isInitialBalanceTx } from '../../utils/financial';
+import { parseMoney, formatCurrency } from '../../lib/utils';
 
 interface AccountFormProps {
   onClose: () => void;
@@ -12,22 +12,41 @@ interface AccountFormProps {
 }
 
 export function AccountForm({ onClose, initialData }: AccountFormProps) {
-  const { addAccount, updateAccount, deleteAccount, transactions, recurringTransactions, addTransaction } = useData();
-
-  const currentBalance = initialData ? getAccountBalance(initialData.id, transactions) : 0;
+  const { addAccount, updateAccount, deleteAccount, transactions, recurringTransactions, settings } = useData();
 
   const [formData, setFormData] = useState({
     name: initialData?.name || '',
-    type: initialData?.type || 'regular' as AccountType,
-    debtDirection: initialData?.debtDirection || 'payable' as DebtDirection,
+    type: initialData?.type || ('regular' as AccountType),
+    debtDirection: initialData?.debtDirection || ('payable' as DebtDirection),
     archived: initialData?.archived || false,
     hidden: initialData?.hidden || false,
-    balance: initialData ? currentBalance.toString() : '0'
+    initialBalance: initialData?.initialBalance !== undefined ? initialData.initialBalance.toString() : '0'
   });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+
+  const txSum = useMemo(() => {
+    if (!initialData) return 0;
+    return transactions
+      .filter(t => t.status !== 'hidden' && (t.accountId === initialData.id || t.transferAccountId === initialData.id))
+      .filter(t => !isInitialBalanceTx(t))
+      .reduce((acc, t) => {
+        if (t.type === 'income') {
+          return t.accountId === initialData.id ? acc + t.amount : acc;
+        } else if (t.type === 'expense') {
+          return t.accountId === initialData.id ? acc - t.amount : acc;
+        } else if (t.type === 'transfer') {
+          if (t.accountId === initialData.id) return acc - t.amount;
+          if (t.transferAccountId === initialData.id) return acc + t.amount;
+        }
+        return acc;
+      }, 0);
+  }, [initialData, transactions]);
+
+  const parsedInitial = parseMoney(formData.initialBalance) || 0;
+  const currentComputedBalance = parsedInitial + txSum;
 
   const associatedTxCount = initialData 
     ? transactions.filter(t => t.accountId === initialData.id || t.transferAccountId === initialData.id).length 
@@ -42,52 +61,31 @@ export function AccountForm({ onClose, initialData }: AccountFormProps) {
     setError(null);
 
     try {
-      if (!formData.name) throw new Error('Name is required');
+      if (!formData.name.trim()) throw new Error('Account name is required');
 
-      const submission: any = {
-        name: formData.name,
+      const initialBalanceNum = parseMoney(formData.initialBalance) || 0;
+
+      const submission: Partial<Account> = {
+        name: formData.name.trim(),
         type: formData.type,
         archived: formData.archived,
-        hidden: formData.hidden
+        hidden: formData.hidden,
+        initialBalance: initialBalanceNum
       };
 
       if (formData.type === 'debt') {
         submission.debtDirection = formData.debtDirection;
       }
 
-      let accountId = initialData?.id;
-
       if (initialData) {
         await updateAccount(initialData.id, submission);
       } else {
-        const result = await addAccount(submission);
-        // @ts-ignore - assuming addAccount returns the new id
-        accountId = result?.id;
-      }
-
-      // Handle balance correction
-      const newBalance = parseMoney(formData.balance);
-      const diff = initialData ? newBalance - currentBalance : newBalance;
-
-      if (diff !== 0 && accountId) {
-        await addTransaction({
-          amount: Math.abs(diff),
-          date: Date.now(),
-          accountId: accountId,
-          categoryId: '',
-          tagIds: [],
-          type: diff > 0 ? 'income' : 'expense',
-          status: 'normal',
-          name: initialData ? `Balance Correction of ${formData.name}` : `Initial Balance of ${formData.name}`,
-          description: initialData ? 'Balance Correction' : 'Initial Balance',
-          isCorrection: true,
-          isInitialBalance: !initialData
-        });
+        await addAccount(submission);
       }
 
       onClose();
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || 'Failed to save account');
     } finally {
       setLoading(false);
     }
@@ -201,17 +199,29 @@ export function AccountForm({ onClose, initialData }: AccountFormProps) {
             />
           </label>
           <label className="block">
-            <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">{initialData ? 'Update Balance' : 'Initial Balance'}</span>
+            <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Initial Amount</span>
             <Input 
               placeholder="0.00" 
               icon={Wallet}
-              value={formData.balance}
-              onChange={e => setFormData({ ...formData, balance: e.target.value })}
+              value={formData.initialBalance}
+              onChange={e => setFormData({ ...formData, initialBalance: e.target.value })}
               required
               className="text-lg font-bold"
             />
           </label>
         </div>
+
+        {initialData && (
+          <div className="p-4 bg-black/5 dark:bg-white/5 rounded-2xl flex items-center justify-between border border-black/5 dark:border-white/5">
+            <div className="flex items-center gap-2 text-foreground/70">
+              <Calculator size={16} />
+              <span className="text-xs font-medium">Recomputed Current Value</span>
+            </div>
+            <span className="text-sm font-bold text-foreground">
+              {formatCurrency(currentComputedBalance, settings.currency)}
+            </span>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <label className="block">
@@ -258,36 +268,38 @@ export function AccountForm({ onClose, initialData }: AccountFormProps) {
           {initialData && (
             <label className="flex items-center gap-3 p-4 bg-black/5 dark:bg-white/5 rounded-2xl cursor-pointer">
               <input 
-                type="checkbox" 
-                checked={formData.archived}
-                onChange={e => setFormData({ ...formData, archived: e.target.checked })}
-                className="w-5 h-5 rounded-lg border-none bg-black/10 text-black focus:ring-0"
-              />
+              type="checkbox" 
+              checked={formData.archived}
+              onChange={e => setFormData({ ...formData, archived: e.target.checked })}
+              className="w-5 h-5 rounded-lg border-none bg-black/10 text-black focus:ring-0"
+            />
+            <div className="flex flex-col">
               <div className="flex items-center gap-2">
                 <Archive size={16} />
                 <span className="text-sm font-bold uppercase tracking-wider">Archived Account</span>
               </div>
-            </label>
-          )}
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <Button type="submit" disabled={loading} className="w-full">
-          {loading ? 'Saving...' : initialData ? 'Update Account' : 'Create Account'}
-        </Button>
-        {initialData && (
-          <Button 
-            type="button" 
-            variant="destructive" 
-            onClick={() => setIsConfirmingDelete(true)} 
-            disabled={loading} 
-            className="w-full"
-          >
-            Delete Account
-          </Button>
+            </div>
+          </label>
         )}
       </div>
-    </form>
+    </div>
+
+    <div className="space-y-3">
+      <Button type="submit" disabled={loading} className="w-full">
+        {loading ? 'Saving...' : initialData ? 'Update Account' : 'Create Account'}
+      </Button>
+      {initialData && (
+        <Button 
+          type="button" 
+          variant="destructive" 
+          onClick={() => setIsConfirmingDelete(true)} 
+          disabled={loading} 
+          className="w-full"
+        >
+          Delete Account
+        </Button>
+      )}
+    </div>
+  </form>
   );
 }

@@ -101,7 +101,7 @@ export default function Settings() {
               size="icon" 
               onClick={() => { 
                 if (newCat.trim()) { 
-                  addCategory({ label: newCat.trim(), color: newCatColor }); 
+                  addCategory({ label: newCat.trim(), color: newCatColor, type: 'both' }); 
                   setNewCat(''); 
                 } 
               }}
@@ -121,13 +121,15 @@ export default function Settings() {
                     />
                     {c.label}
                   </span>
-                  <button 
-                    onClick={() => deleteCategory(c.id)}
-                    className="p-1 hover:text-red-500 transition-colors opacity-30 hover:opacity-100"
-                    title={`Delete ${c.label}`}
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {c.label.trim().toLowerCase() !== 'uncategorized' && (
+                    <button 
+                      onClick={() => deleteCategory(c.id)}
+                      className="p-1 hover:text-red-500 transition-colors opacity-30 hover:opacity-100"
+                      title={`Delete ${c.label}`}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="relative flex-1 min-w-0">
