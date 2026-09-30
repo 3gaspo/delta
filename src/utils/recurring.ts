@@ -2,6 +2,7 @@ import { RecurringTransaction, Transaction } from '../types';
 
 export function getNextPeriodDate(currentDate: number, periodicityDays: number): number {
   const d = new Date(currentDate);
+  d.setHours(0, 0, 0, 0);
   if (periodicityDays === 7 || periodicityDays === 14) {
     d.setDate(d.getDate() + periodicityDays);
   } else if (periodicityDays === 30) {
@@ -25,6 +26,7 @@ export function getNextPeriodDate(currentDate: number, periodicityDays: number):
   } else {
     d.setDate(d.getDate() + Math.max(1, periodicityDays));
   }
+  d.setHours(0, 0, 0, 0);
   return d.getTime();
 }
 
@@ -72,7 +74,7 @@ export function generateDueTransactions(
   existingTransactions: Transaction[] = []
 ): { newTransactions: Transaction[]; updatedLastGeneratedDate: number } {
   if (rule.active === false || !rule.periodicityDays || rule.periodicityDays <= 0) {
-    return { newTransactions: [], updatedLastGeneratedDate: rule.lastGeneratedDate || rule.startDate };
+    return { newTransactions: [], updatedLastGeneratedDate: rule.lastGeneratedDate || 0 };
   }
 
   const existingDates = new Set(
@@ -84,26 +86,39 @@ export function generateDueTransactions(
       })
   );
 
-  const newTransactions: Transaction[] = [];
-  let candidateDate = rule.lastGeneratedDate
+  const hasOccurrences = existingDates.size > 0;
+
+  // If occurrences already exist, candidate starts at next period from lastGeneratedDate.
+  // If no occurrences exist yet (e.g. newly created rule, or first occurrence due today),
+  // candidate starts at rule.startDate!
+  let candidateDate = (rule.lastGeneratedDate && hasOccurrences)
     ? getNextPeriodDate(rule.lastGeneratedDate, rule.periodicityDays)
     : rule.startDate;
 
+  // Ensure cutoff includes the entire current calendar day of upToDate (23:59:59.999 local time)
+  // so any transaction due today (regardless of hour created or timezone) is generated!
+  const targetEnd = new Date(upToDate);
+  targetEnd.setHours(23, 59, 59, 999);
+  const cutoffTime = targetEnd.getTime();
+
+  const newTransactions: Transaction[] = [];
   let lastGenerated = rule.lastGeneratedDate || 0;
   let iterations = 0;
   const maxIterations = 500; // Safeguard
 
-  while (candidateDate <= upToDate && iterations < maxIterations) {
+  while (candidateDate <= cutoffTime && iterations < maxIterations) {
     iterations++;
     const candObj = new Date(candidateDate);
     const dateKey = `${candObj.getFullYear()}-${candObj.getMonth()}-${candObj.getDate()}`;
 
     if (!existingDates.has(dateKey)) {
-      const now = Date.now();
+      // Recurring transactions are always added at the first instant of that day (00:00:00)
+      const txDateObj = new Date(candObj.getFullYear(), candObj.getMonth(), candObj.getDate(), 0, 0, 0, 0);
+      const startOfDayTime = txDateObj.getTime();
       newTransactions.push({
         id: crypto.randomUUID(),
         amount: rule.amount,
-        date: candidateDate,
+        date: startOfDayTime,
         accountId: rule.accountId,
         transferAccountId: rule.transferAccountId,
         categoryId: rule.categoryId || '',
@@ -113,18 +128,20 @@ export function generateDueTransactions(
         name: rule.name,
         description: rule.description || '',
         recurringId: rule.id,
-        createdAt: now,
-        updatedAt: now
+        createdAt: startOfDayTime,
+        updatedAt: startOfDayTime
       });
       existingDates.add(dateKey);
+      lastGenerated = startOfDayTime;
+    } else {
+      lastGenerated = candidateDate;
     }
 
-    lastGenerated = candidateDate;
     candidateDate = getNextPeriodDate(candidateDate, rule.periodicityDays);
   }
 
   return {
     newTransactions,
-    updatedLastGeneratedDate: lastGenerated || rule.lastGeneratedDate || rule.startDate
+    updatedLastGeneratedDate: lastGenerated > 0 ? lastGenerated : (rule.lastGeneratedDate || 0)
   };
 }

@@ -40,6 +40,12 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
     }
   };
 
+  const txDate = new Date(transaction.date);
+  const hasSpecificTime = txDate.getHours() !== 0 || txDate.getMinutes() !== 0 || txDate.getSeconds() !== 0;
+  const timeFormatted = hasSpecificTime 
+    ? txDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : null;
+
   return (
     <div className={cn(
       "p-4 border-b border-black/5 dark:border-white/5 last:border-0 flex items-center justify-between gap-4 group transition-opacity",
@@ -84,7 +90,7 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
             <p className="text-[10px] opacity-60 mb-1 truncate">{transaction.description}</p>
           )}
           <div className="flex items-center gap-1.5 opacity-40 text-[10px] font-medium uppercase tracking-wider flex-wrap">
-            <span>{formatDate(transaction.date)}</span>
+            <span>{timeFormatted ? timeFormatted : formatDate(transaction.date)}</span>
             <span>•</span>
             <span>{account?.name}</span>
             {isTransfer && (
@@ -109,20 +115,35 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
         </div>
       </div>
 
-      <div className="text-right shrink-0">
-        <p className={cn(
-          "font-bold text-lg",
-          isIncome ? "text-emerald-500" : 
-          isTransfer ? "text-blue-500" : 
-          "text-red-500"
-        )}>
-          {isIncome ? '+' : isTransfer ? '' : '-'}{formatCurrency(transaction.amount, settings.currency)}
-        </p>
-        <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-          <button onClick={() => setIsEditing(true)} className="p-1 hover:text-blue-500 transition-colors" title="Edit">
+      <div className="flex items-center gap-3 sm:gap-4 shrink-0 text-right">
+        <div>
+          <p className={cn(
+            "font-bold text-base sm:text-lg tracking-tight",
+            isIncome ? "text-emerald-500" : 
+            isTransfer ? "text-blue-500" : 
+            "text-red-500"
+          )}>
+            {isIncome ? '+' : isTransfer ? '' : '-'}{formatCurrency(transaction.amount, settings.currency)}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          <button 
+            type="button"
+            onClick={() => setIsEditing(true)} 
+            className="w-8 h-8 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-foreground/70 hover:text-foreground flex items-center justify-center transition-colors cursor-pointer" 
+            title="Edit"
+            aria-label="Edit"
+          >
             <Edit3 size={14} />
           </button>
-          <button onClick={() => setIsDeleting(true)} className="p-1 hover:text-red-500 transition-colors" title="Delete">
+          <button 
+            type="button"
+            onClick={() => setIsDeleting(true)} 
+            className="w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors cursor-pointer" 
+            title="Delete"
+            aria-label="Delete"
+          >
             <Trash2 size={14} />
           </button>
         </div>
@@ -133,7 +154,7 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
       </Modal>
 
       <Modal isOpen={isDeleting} onClose={() => setIsDeleting(false)} title="Delete Transaction">
-        <div className="space-y-4 py-2">
+        <div className="space-y-4 py-1">
           <div className="flex items-center gap-3 text-red-500">
             <div className="w-10 h-10 rounded-2xl bg-red-500/10 flex items-center justify-center shrink-0">
               <Trash2 size={20} />
@@ -142,11 +163,11 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
               <h3 className="font-bold text-base text-foreground">
                 Delete "{transaction.name || category?.label || 'Transaction'}"?
               </h3>
-              <p className="text-xs text-red-500 font-medium">This action cannot be undone.</p>
+              <p className="text-xs text-red-500 font-medium">This cannot be undone.</p>
             </div>
           </div>
           <p className="text-xs text-foreground/70">
-            Are you sure you want to delete this transaction for <strong>{formatCurrency(transaction.amount, settings.currency)}</strong>?
+            Permanently remove this transaction ({formatCurrency(transaction.amount, settings.currency)}).
           </p>
           <div className="flex flex-col gap-2 pt-2">
             <Button
@@ -220,6 +241,12 @@ export function GroupTransactionItem({
     }
   };
 
+  const grpDate = new Date(sharedDate);
+  const hasSpecificTime = grpDate.getHours() !== 0 || grpDate.getMinutes() !== 0 || grpDate.getSeconds() !== 0;
+  const timeFormatted = hasSpecificTime 
+    ? grpDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : null;
+
   return (
     <div className="border-b border-black/5 dark:border-white/5 last:border-0">
       <div className="p-4 flex items-center justify-between gap-4 group transition-colors hover:bg-purple-500/5">
@@ -236,7 +263,7 @@ export function GroupTransactionItem({
               </span>
             </div>
             <div className="flex items-center gap-1.5 opacity-60 text-[10px] font-medium uppercase tracking-wider mt-0.5">
-              <span>{formatDate(sharedDate)}</span>
+              <span>{timeFormatted ? timeFormatted : formatDate(sharedDate)}</span>
               <span>•</span>
               <span className="truncate">{uniqueCategoryLabels.join(', ') || 'Group Categories'}</span>
               <span>•</span>
@@ -245,22 +272,41 @@ export function GroupTransactionItem({
           </div>
         </div>
 
-        <div className="text-right shrink-0 flex items-center gap-3">
+        <div className="flex items-center gap-3 sm:gap-4 shrink-0 text-right">
           <div>
-            <p className="font-bold text-lg text-purple-600 dark:text-purple-400">
+            <p className="font-bold text-base sm:text-lg text-purple-600 dark:text-purple-400 tracking-tight">
               {totalAmount < 0 ? '+' : '-'}{formatCurrency(Math.abs(totalAmount), settings.currency)}
             </p>
-            <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-              <button onClick={() => setExpanded(!expanded)} className="p-1 hover:text-purple-500 transition-colors" title={expanded ? "Collapse" : "Expand"}>
-                {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              </button>
-              <button onClick={() => setIsEditing(true)} className="p-1 hover:text-blue-500 transition-colors" title="Edit Group">
-                <Edit3 size={14} />
-              </button>
-              <button onClick={() => setIsDeleting(true)} className="p-1 hover:text-red-500 transition-colors" title="Delete Group">
-                <Trash2 size={14} />
-              </button>
-            </div>
+          </div>
+
+          <div className="flex items-center gap-1 shrink-0">
+            <button 
+              type="button"
+              onClick={() => setExpanded(!expanded)} 
+              className="w-8 h-8 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center transition-colors cursor-pointer" 
+              title={expanded ? "Collapse" : "Expand"}
+              aria-label={expanded ? "Collapse" : "Expand"}
+            >
+              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+            <button 
+              type="button"
+              onClick={() => setIsEditing(true)} 
+              className="w-8 h-8 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-foreground/70 hover:text-foreground flex items-center justify-center transition-colors cursor-pointer" 
+              title="Edit Group"
+              aria-label="Edit Group"
+            >
+              <Edit3 size={14} />
+            </button>
+            <button 
+              type="button"
+              onClick={() => setIsDeleting(true)} 
+              className="w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors cursor-pointer" 
+              title="Delete Group"
+              aria-label="Delete Group"
+            >
+              <Trash2 size={14} />
+            </button>
           </div>
         </div>
       </div>
@@ -305,7 +351,7 @@ export function GroupTransactionItem({
       </Modal>
 
       <Modal isOpen={isDeleting} onClose={() => setIsDeleting(false)} title="Delete Group Transaction">
-        <div className="space-y-4 py-2">
+        <div className="space-y-4 py-1">
           <div className="flex items-center gap-3 text-red-500">
             <div className="w-10 h-10 rounded-2xl bg-red-500/10 flex items-center justify-center shrink-0">
               <Trash2 size={20} />
@@ -314,11 +360,11 @@ export function GroupTransactionItem({
               <h3 className="font-bold text-base text-foreground">
                 Delete "{sharedName}"?
               </h3>
-              <p className="text-xs text-red-500 font-medium">This action cannot be undone.</p>
+              <p className="text-xs text-red-500 font-medium">This cannot be undone.</p>
             </div>
           </div>
           <p className="text-xs text-foreground/70">
-            Are you sure you want to delete this group transaction and all <strong>{subtransactions.length} sub-transactions</strong>?
+            Permanently delete this group and its {subtransactions.length} sub-transactions.
           </p>
           <div className="flex flex-col gap-2 pt-2">
             <Button
@@ -328,7 +374,7 @@ export function GroupTransactionItem({
               disabled={deletingLoading}
               className="w-full text-xs font-bold py-3"
             >
-              {deletingLoading ? 'Deleting...' : 'Delete Group & All Sub-Transactions'}
+              {deletingLoading ? 'Deleting...' : 'Delete Group'}
             </Button>
             <Button
               type="button"
@@ -401,34 +447,151 @@ export function TransactionList({ transactions }: TransactionListProps) {
       return dayB - dayA;
     }
 
+    if (b.sortDate !== a.sortDate) {
+      return b.sortDate - a.sortDate;
+    }
+
     const createdA = a.sortCreatedAt || a.sortDate;
     const createdB = b.sortCreatedAt || b.sortDate;
     return createdB - createdA;
   });
 
+  const todayTimestamp = startOfDay(new Date()).getTime();
+
+  // Count how many transactions belong to today
+  const todayCount = historyItems.filter(item => {
+    return startOfDay(new Date(item.sortDate)).getTime() === todayTimestamp;
+  }).length;
+
+  // Rule:
+  // Show today's transactions (whatever the number), and a maximum of 10 transactions (when there are less than 10 in today, otherwise just show today)
+  const baseLimit = Math.max(10, todayCount);
+  const [extraLimit, setExtraLimit] = useState(0);
+
+  const visibleLimit = baseLimit + extraLimit;
+  const visibleItems = historyItems.slice(0, visibleLimit);
+
+  // Group visible items by day
+  interface DayGroup {
+    dayTimestamp: number;
+    label: string;
+    isToday: boolean;
+    isYesterday: boolean;
+    items: HistoryItem[];
+  }
+
+  const dayGroups: DayGroup[] = [];
+  const dayGroupMap = new Map<number, DayGroup>();
+
+  visibleItems.forEach(item => {
+    const dayTime = startOfDay(new Date(item.sortDate)).getTime();
+    if (!dayGroupMap.has(dayTime)) {
+      const d = new Date(dayTime);
+      const isToday = dayTime === todayTimestamp;
+      const isYesterday = dayTime === todayTimestamp - 86400000;
+
+      let label = '';
+      if (isToday) {
+        label = 'Today';
+      } else if (isYesterday) {
+        label = 'Yesterday';
+      } else {
+        label = d.toLocaleDateString(undefined, {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          year: d.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+        });
+      }
+
+      const newGroup: DayGroup = {
+        dayTimestamp: dayTime,
+        label,
+        isToday,
+        isYesterday,
+        items: []
+      };
+      dayGroupMap.set(dayTime, newGroup);
+      dayGroups.push(newGroup);
+    }
+
+    dayGroupMap.get(dayTime)!.items.push(item);
+  });
+
   if (historyItems.length === 0) {
     return (
-      <div className="p-12 text-center opacity-20 flex flex-col items-center gap-4">
-        <AlignLeft size={48} strokeWidth={1} />
+      <div className="p-12 text-center opacity-30 flex flex-col items-center gap-3">
+        <AlignLeft size={36} strokeWidth={1.5} />
         <p className="font-bold uppercase tracking-[0.2em] text-xs">No transactions</p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col">
-      {historyItems.map(item => {
-        if (item.type === 'single') {
-          return <TransactionItem key={item.transaction.id} transaction={item.transaction} />;
-        }
-        return (
-          <GroupTransactionItem 
-            key={item.groupId} 
-            groupId={item.groupId} 
-            subtransactions={item.subtransactions} 
-          />
-        );
-      })}
+    <div className="space-y-5">
+      {dayGroups.map(group => (
+        <div key={group.dayTimestamp} className="space-y-1.5">
+          {/* Day Header with slight separation */}
+          <div className="flex items-center justify-between px-2 pt-0.5">
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                "text-[11px] font-bold uppercase tracking-wider",
+                group.isToday 
+                  ? "text-foreground font-black" 
+                  : "opacity-40 text-foreground"
+              )}>
+                {group.label}
+              </span>
+              {group.isToday && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              )}
+            </div>
+            <span className="text-[10px] font-semibold opacity-30">
+              {group.items.length} {group.items.length === 1 ? 'transaction' : 'transactions'}
+            </span>
+          </div>
+
+          {/* Day Group Card */}
+          <div className="bg-white dark:bg-black/20 rounded-2xl border border-black/5 dark:border-white/5 divide-y divide-black/5 dark:divide-white/5 overflow-hidden shadow-xs">
+            {group.items.map(item => {
+              if (item.type === 'single') {
+                return <TransactionItem key={item.transaction.id} transaction={item.transaction} />;
+              }
+              return (
+                <GroupTransactionItem 
+                  key={item.groupId} 
+                  groupId={item.groupId} 
+                  subtransactions={item.subtransactions} 
+                />
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      {/* Button to show 10 more (can be clicked indefinitely) */}
+      {visibleLimit < historyItems.length && (
+        <div className="pt-3 pb-1 flex flex-col items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setExtraLimit(prev => prev + 10)}
+            className="inline-flex items-center gap-2 text-xs font-semibold px-6 py-2.5 rounded-xl border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 text-foreground cursor-pointer transition-colors"
+          >
+            Show 10 more
+          </Button>
+          <span className="text-[10px] font-medium opacity-40">
+            Showing {visibleItems.length} of {historyItems.length}
+          </span>
+        </div>
+      )}
+
+      {visibleLimit >= historyItems.length && historyItems.length > 10 && (
+        <p className="text-center text-[10px] font-semibold opacity-30 pt-2 pb-1">
+          All {historyItems.length} transactions displayed
+        </p>
+      )}
     </div>
   );
 }

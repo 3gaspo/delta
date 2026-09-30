@@ -94,7 +94,7 @@ export default function Home() {
 
       <div className="space-y-8">
         {/* Transaction History Block */}
-        <Card label="Transaction History">
+        <Card label="Transaction History" className="bg-transparent shadow-none p-0">
           <TransactionList transactions={filteredTransactions} />
         </Card>
       </div>

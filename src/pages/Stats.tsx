@@ -9,7 +9,7 @@ import {
 } from 'recharts';
 import { formatCurrency, cn } from '../lib/utils';
 import { TransactionType } from '../types';
-import { isInitialBalanceTx, getAccountBalance } from '../utils/financial';
+import { isInitialBalanceTx, getAccountBalance, computeFullPeriodAverages } from '../utils/financial';
 import { 
   startOfMonth, endOfMonth, format, eachMonthOfInterval, 
   startOfYear, startOfWeek, endOfWeek,
@@ -31,6 +31,7 @@ export default function Stats() {
   // Cash Flow Chart Controls
   const [flowPeriod, setFlowPeriod] = useState<'weekly' | 'monthly'>('monthly');
   const [flowTypeFilter, setFlowTypeFilter] = useState<'all' | TransactionType>('all');
+  const [avgPeriod, setAvgPeriod] = useState<'monthly' | 'yearly'>('monthly');
 
   const stats = useMemo(() => {
     if (!transactions || !categories || !accounts) return null;
@@ -187,9 +188,12 @@ export default function Stats() {
     const totalExpenses = flowData.reduce((sum, d) => sum + d.expenses, 0);
     const totalIncome = flowData.reduce((sum, d) => sum + d.income, 0);
 
+    const filteredForAverages = getFiltered();
+    const periodAverages = computeFullPeriodAverages(filteredForAverages, now);
+
     // 3. Category Data
-    const catFiltered = getFiltered().filter(t => !isInitialBalanceTx(t) && t.date >= startOfMonth(now).getTime() && t.date <= endOfMonth(now).getTime());
-    const categoryMap = new Map<string, { value: number, budget: number, color: string }>();
+    const catFiltered = filteredForAverages.filter(t => !isInitialBalanceTx(t) && t.date >= startOfMonth(now).getTime() && t.date <= endOfMonth(now).getTime());
+    const categoryMap = new Map<string, { value: number, budget: number, color: string, monthlyAvg: number | null }>();
     const CHART_COLORS = [
       '#000000', '#3b82f6', '#ef4444', '#10b981', '#f59e0b', 
       '#8b5cf6', '#ec4899', '#6366f1', '#14b8a6', '#f43f5e'
@@ -201,23 +205,27 @@ export default function Stats() {
         .reduce((sum, t) => sum + t.amount, 0);
       
       const existingColor = cat.color || CHART_COLORS[idx % CHART_COLORS.length];
+      const catAvg = periodAverages.categoryMonthlyAvg[cat.id] ?? null;
+
       categoryMap.set(cat.label, {
         value: total,
         budget: cat.budgetLimit || 0,
-        color: existingColor
+        color: existingColor,
+        monthlyAvg: catAvg
       });
     });
 
     const categoryTotals = Array.from(categoryMap.entries())
       .map(([name, data]) => ({ name, ...data }))
-      .filter(c => c.value > 0 || c.budget > 0);
+      .filter(c => c.value > 0 || c.budget > 0 || (c.monthlyAvg !== null && c.monthlyAvg > 0));
 
     return {
       balanceData,
       flowData,
       categoryTotals,
       totalExpenses,
-      totalIncome
+      totalIncome,
+      periodAverages
     };
   }, [transactions, categories, accounts, includeDebts, globalFilterId, balancePeriod, balanceAccountId, flowPeriod, flowTypeFilter]);
 
@@ -380,6 +388,139 @@ export default function Stats() {
               </BarChart>
             </ResponsiveContainer>
           </Card>
+
+          {/* Average Aggregates with Monthly/Yearly toggle */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-40">
+                Average Aggregates
+              </span>
+
+              {/* Monthly / Yearly Toggle */}
+              <div className="flex items-center p-0.5 bg-black/5 dark:bg-white/10 rounded-xl">
+                <button
+                  type="button"
+                  onClick={() => setAvgPeriod('monthly')}
+                  className={cn(
+                    "px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer",
+                    avgPeriod === 'monthly'
+                      ? "bg-white dark:bg-black text-foreground shadow-xs"
+                      : "text-foreground/50 hover:text-foreground"
+                  )}
+                >
+                  Monthly
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAvgPeriod('yearly')}
+                  className={cn(
+                    "px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer",
+                    avgPeriod === 'yearly'
+                      ? "bg-white dark:bg-black text-foreground shadow-xs"
+                      : "text-foreground/50 hover:text-foreground"
+                  )}
+                >
+                  Yearly
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Avg expenses */}
+              <div className="p-4 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-2xl flex flex-col justify-between">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider opacity-40">
+                    avg expenses
+                  </p>
+                  <div className="mt-1">
+                    {(() => {
+                      const expVal = avgPeriod === 'monthly'
+                        ? stats.periodAverages.monthlyExpensesAvg
+                        : stats.periodAverages.yearlyExpensesAvg;
+                      if (expVal === null) {
+                        return <p className="text-xl font-bold opacity-30 tracking-widest">—</p>;
+                      }
+                      return (
+                        <p className="text-xl font-bold text-red-500 tracking-tight">
+                          -{formatCurrency(expVal, settings.currency)}
+                        </p>
+                      );
+                    })()}
+                  </div>
+                </div>
+                <p className="text-[9px] font-medium opacity-40 mt-2">
+                  {avgPeriod === 'monthly'
+                    ? (stats.periodAverages.fullMonthsCount > 0
+                        ? `${stats.periodAverages.fullMonthsCount} full ${stats.periodAverages.fullMonthsCount === 1 ? 'month' : 'months'}`
+                        : 'Not enough data')
+                    : (stats.periodAverages.fullYearsCount > 0
+                        ? `${stats.periodAverages.fullYearsCount} full ${stats.periodAverages.fullYearsCount === 1 ? 'year' : 'years'}`
+                        : 'Not enough data')}
+                </p>
+              </div>
+
+              {/* Avg income */}
+              <div className="p-4 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-2xl flex flex-col justify-between">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider opacity-40">
+                    avg income
+                  </p>
+                  <div className="mt-1">
+                    {(() => {
+                      const incVal = avgPeriod === 'monthly'
+                        ? stats.periodAverages.monthlyIncomeAvg
+                        : stats.periodAverages.yearlyIncomeAvg;
+                      if (incVal === null) {
+                        return <p className="text-xl font-bold opacity-30 tracking-widest">—</p>;
+                      }
+                      return (
+                        <p className="text-xl font-bold text-emerald-500 tracking-tight">
+                          +{formatCurrency(incVal, settings.currency)}
+                        </p>
+                      );
+                    })()}
+                  </div>
+                </div>
+                <p className="text-[9px] font-medium opacity-40 mt-2">
+                  {avgPeriod === 'monthly'
+                    ? (stats.periodAverages.fullMonthsCount > 0 ? 'Full months only' : 'Not enough data')
+                    : (stats.periodAverages.fullYearsCount > 0 ? 'Full years only' : 'Not enough data')}
+                </p>
+              </div>
+
+              {/* Avg net */}
+              <div className="p-4 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-2xl flex flex-col justify-between">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider opacity-40">
+                    avg net
+                  </p>
+                  <div className="mt-1">
+                    {(() => {
+                      const netVal = avgPeriod === 'monthly'
+                        ? stats.periodAverages.monthlyNetAvg
+                        : stats.periodAverages.yearlyNetAvg;
+                      if (netVal === null) {
+                        return <p className="text-xl font-bold opacity-30 tracking-widest">—</p>;
+                      }
+                      return (
+                        <p className={cn(
+                          "text-xl font-bold tracking-tight",
+                          netVal > 0 ? "text-emerald-500" : netVal < 0 ? "text-red-500" : "opacity-60"
+                        )}>
+                          {netVal > 0 ? '+' : ''}{formatCurrency(netVal, settings.currency)}
+                        </p>
+                      );
+                    })()}
+                  </div>
+                </div>
+                <p className="text-[9px] font-medium opacity-40 mt-2">
+                  {avgPeriod === 'monthly'
+                    ? (stats.periodAverages.fullMonthsCount > 0 ? 'Full months net flow' : '—')
+                    : (stats.periodAverages.fullYearsCount > 0 ? 'Full years net flow' : '—')}
+                </p>
+              </div>
+            </div>
+          </div>
         </section>
 
         {/* 3. By Category */}
@@ -441,7 +582,9 @@ export default function Stats() {
                             <div className="w-2.5 h-2.5 rounded-full shadow-xs shrink-0" style={{ backgroundColor: cat.color }} />
                             <div className="flex flex-col gap-0.5">
                                <span className="opacity-90 truncate max-w-[180px] font-bold">{cat.name}</span>
-                               <span className="text-[8px] opacity-40 font-semibold">Current Month</span>
+                               <span className="text-[8px] opacity-40 font-semibold">
+                                 Current Month • Avg: {cat.monthlyAvg !== null ? `${formatCurrency(cat.monthlyAvg, settings.currency)}/mo` : '—'}
+                               </span>
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-0.5">

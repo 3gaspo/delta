@@ -9,9 +9,10 @@ import { parseMoney, formatCurrency } from '../../lib/utils';
 interface AccountFormProps {
   onClose: () => void;
   initialData?: Account;
+  initialDeleteConfirm?: boolean;
 }
 
-export function AccountForm({ onClose, initialData }: AccountFormProps) {
+export function AccountForm({ onClose, initialData, initialDeleteConfirm = false }: AccountFormProps) {
   const { addAccount, updateAccount, deleteAccount, transactions, recurringTransactions, settings } = useData();
 
   const [formData, setFormData] = useState({
@@ -25,7 +26,7 @@ export function AccountForm({ onClose, initialData }: AccountFormProps) {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(initialDeleteConfirm);
 
   const txSum = useMemo(() => {
     if (!initialData) return 0;
@@ -119,32 +120,26 @@ export function AccountForm({ onClose, initialData }: AccountFormProps) {
 
   if (isConfirmingDelete && initialData) {
     return (
-      <div className="space-y-5 py-2">
+      <div className="space-y-4 py-1">
         <div className="flex items-center gap-3 text-red-500">
           <div className="w-10 h-10 rounded-2xl bg-red-500/10 flex items-center justify-center shrink-0">
             <Trash2 size={20} />
           </div>
           <div>
             <h3 className="font-bold text-base text-foreground">Delete "{initialData.name}"?</h3>
-            <p className="text-xs text-red-500 font-medium">This action cannot be undone.</p>
+            <p className="text-xs text-red-500 font-medium">This cannot be undone.</p>
           </div>
         </div>
 
         {error && <p className="text-red-500 text-xs font-semibold p-3 bg-red-500/10 rounded-xl">{error}</p>}
 
-        <p className="text-xs text-foreground/70 leading-relaxed">
-          {associatedTxCount > 0 || associatedRecCount > 0 ? (
-            <>
-              This account has <strong className="text-foreground">{associatedTxCount} transaction{associatedTxCount !== 1 ? 's' : ''}</strong>
-              {associatedRecCount > 0 && <> and <strong className="text-foreground">{associatedRecCount} recurring rule{associatedRecCount !== 1 ? 's' : ''}</strong></>}. 
-              Deleting this account will permanently remove it along with all its associated transactions.
-            </>
-          ) : (
-            'Are you sure you want to delete this account? It will be removed permanently.'
-          )}
+        <p className="text-xs text-foreground/70">
+          {associatedTxCount > 0 
+            ? `Permanently removes this account and its ${associatedTxCount} transaction${associatedTxCount !== 1 ? 's' : ''}.`
+            : 'Permanently remove this account.'}
         </p>
 
-        <div className="flex flex-col gap-2.5 pt-2">
+        <div className="flex flex-col gap-2 pt-2">
           <Button
             type="button"
             variant="destructive"
@@ -152,10 +147,10 @@ export function AccountForm({ onClose, initialData }: AccountFormProps) {
             disabled={loading}
             className="w-full text-xs font-bold py-3"
           >
-            {loading ? 'Deleting...' : (associatedTxCount > 0 ? 'Delete Account & All Transactions' : 'Confirm Delete')}
+            {loading ? 'Deleting...' : 'Delete Account'}
           </Button>
 
-          {(associatedTxCount > 0 || associatedRecCount > 0) && (
+          {associatedTxCount > 0 && (
             <Button
               type="button"
               variant="secondary"
@@ -163,14 +158,20 @@ export function AccountForm({ onClose, initialData }: AccountFormProps) {
               disabled={loading}
               className="w-full text-xs font-semibold py-3"
             >
-              Archive Account Instead (Keep History)
+              Archive Instead (Keep History)
             </Button>
           )}
 
           <Button
             type="button"
             variant="ghost"
-            onClick={() => setIsConfirmingDelete(false)}
+            onClick={() => {
+              if (initialDeleteConfirm) {
+                onClose();
+              } else {
+                setIsConfirmingDelete(false);
+              }
+            }}
             disabled={loading}
             className="w-full text-xs font-medium py-2"
           >

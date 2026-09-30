@@ -18,6 +18,7 @@ export default function Accounts() {
   const [isAdding, setIsAdding] = useState(false);
   const [isReordering, setIsReordering] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [deletingAccount, setDeletingAccount] = useState<Account | null>(null);
   const [isAddingRecurring, setIsAddingRecurring] = useState(false);
   const [recurringAddMode, setRecurringAddMode] = useState<FormTabMode>('subscription');
 
@@ -103,7 +104,13 @@ export default function Accounts() {
         <Card label="Regular Accounts">
           <div className="divide-y divide-black/5 dark:divide-white/5">
             {regularAccounts.map(a => (
-              <AccountCard key={a.id} account={a} onClick={() => setEditingAccount(a)} />
+              <AccountCard 
+                key={a.id} 
+                account={a} 
+                onClick={() => setEditingAccount(a)} 
+                onEdit={() => setEditingAccount(a)}
+                onDelete={() => setDeletingAccount(a)}
+              />
             ))}
             {regularAccounts.length === 0 && (
               <div className="p-8 text-center opacity-30 flex flex-col items-center gap-2">
@@ -117,7 +124,13 @@ export default function Accounts() {
         <Card label="Debts & Receivables">
           <div className="divide-y divide-black/5 dark:divide-white/5">
             {debtAccounts.map(a => (
-              <AccountCard key={a.id} account={a} onClick={() => setEditingAccount(a)} />
+              <AccountCard 
+                key={a.id} 
+                account={a} 
+                onClick={() => setEditingAccount(a)} 
+                onEdit={() => setEditingAccount(a)}
+                onDelete={() => setDeletingAccount(a)}
+              />
             ))}
             {debtAccounts.length === 0 && (
               <div className="p-8 text-center opacity-30 flex flex-col items-center gap-2">
@@ -129,7 +142,7 @@ export default function Accounts() {
         </Card>
 
         <Card 
-          label="Recurring Transactions & Transfers"
+          label="Recurring Transactions"
           actions={
             <button
               onClick={() => {
@@ -157,6 +170,16 @@ export default function Accounts() {
 
       <Modal isOpen={!!editingAccount} onClose={() => setEditingAccount(null)} title="Edit Account">
         {editingAccount && <AccountForm onClose={() => setEditingAccount(null)} initialData={editingAccount} />}
+      </Modal>
+
+      <Modal isOpen={!!deletingAccount} onClose={() => setDeletingAccount(null)} title="Delete Account">
+        {deletingAccount && (
+          <AccountForm 
+            onClose={() => setDeletingAccount(null)} 
+            initialData={deletingAccount} 
+            initialDeleteConfirm={true} 
+          />
+        )}
       </Modal>
 
       <Modal 

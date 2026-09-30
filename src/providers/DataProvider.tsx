@@ -545,7 +545,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       data.transactions
     );
 
-    rule.lastGeneratedDate = updatedLastGeneratedDate;
+    if (updatedLastGeneratedDate > 0) {
+      rule.lastGeneratedDate = updatedLastGeneratedDate;
+    } else {
+      delete rule.lastGeneratedDate;
+    }
 
     if (firebaseReady && db) {
       const batch = writeBatch(db);
@@ -590,7 +594,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       data.transactions
     );
 
-    updatedRule.lastGeneratedDate = updatedLastGeneratedDate;
+    if (updatedLastGeneratedDate > 0) {
+      updatedRule.lastGeneratedDate = updatedLastGeneratedDate;
+    }
 
     if (firebaseReady && db) {
       const batch = writeBatch(db);

@@ -249,34 +249,35 @@ export function computeExpectedMonthlyFinancials(
     }
   });
 
-  // 2. Expected Expenses from recurring expenses + category budgets
+  // 2. Expected Expenses:
+  // Add all recurring transactions first, then for each budget category, add that category's budget minus the already added category expenses from the recurring transactions.
   const recurringExpensesByCat = new Map<string, number>();
-  let unassignedRecurringExpenses = 0;
+  let totalRecurringExpenses = 0;
 
   activeRecurring
     .filter(r => r.type === 'expense')
     .forEach(r => {
       const monthly = getMonthlyEquivalent(r.amount, r.periodicityDays);
+      totalRecurringExpenses += monthly;
       if (r.categoryId) {
         recurringExpensesByCat.set(r.categoryId, (recurringExpensesByCat.get(r.categoryId) || 0) + monthly);
-      } else {
-        unassignedRecurringExpenses += monthly;
       }
     });
 
-  let expectedExpenses = unassignedRecurringExpenses;
+  let expectedExpenses = totalRecurringExpenses;
 
-  // Track all expense categories (from categories array or recurring expense tags)
-  const allExpenseCategoryIds = new Set([
-    ...(categories || []).filter(c => c.type !== 'income').map(c => c.id),
-    ...Array.from(recurringExpensesByCat.keys())
-  ]);
+  // For each budget category (expense categories with a positive budgetLimit),
+  // add that category's budget minus the already added category expenses from recurring transactions
+  const expenseCategoriesWithBudget = (categories || []).filter(
+    c => c.type !== 'income' && (c.budgetLimit || 0) > 0
+  );
 
-  allExpenseCategoryIds.forEach(catId => {
-    const cat = (categories || []).find(c => c.id === catId);
-    const catBudget = (cat && cat.type !== 'income') ? (cat.budgetLimit || 0) : 0;
-    const recurringInCat = recurringExpensesByCat.get(catId) || 0;
-    expectedExpenses += Math.max(catBudget, recurringInCat);
+  expenseCategoriesWithBudget.forEach(cat => {
+    const recurringInCat = recurringExpensesByCat.get(cat.id) || 0;
+    const catBudget = cat.budgetLimit || 0;
+    if (catBudget > recurringInCat) {
+      expectedExpenses += (catBudget - recurringInCat);
+    }
   });
 
   const expectedDelta = expectedGains - expectedExpenses;
@@ -285,5 +286,205 @@ export function computeExpectedMonthlyFinancials(
     expectedGains,
     expectedExpenses,
     expectedDelta
+  };
+}
+
+export interface FullPeriodAverages {
+  monthlyExpensesAvg: number | null;
+  monthlyIncomeAvg: number | null;
+  monthlyNetAvg: number | null;
+  fullMonthsCount: number;
+
+  yearlyExpensesAvg: number | null;
+  yearlyIncomeAvg: number | null;
+  yearlyNetAvg: number | null;
+  fullYearsCount: number;
+
+  weeklyExpensesAvg: number | null;
+  weeklyIncomeAvg: number | null;
+  weeklyNetAvg: number | null;
+  fullWeeksCount: number;
+
+  categoryMonthlyAvg: Record<string, number | null>;
+}
+
+/**
+ * Computes average aggregates (expenses, income, net) only over full completed periods.
+ * Per requirements: skips the first month/year in which transactions started,
+ * and skips the ongoing current month/year.
+ * When not enough full periods are available, returns null (displayed as a dashed line).
+ */
+export function computeFullPeriodAverages(
+  transactions: Transaction[],
+  referenceDate: Date = new Date()
+): FullPeriodAverages {
+  const emptyResult: FullPeriodAverages = {
+    monthlyExpensesAvg: null,
+    monthlyIncomeAvg: null,
+    monthlyNetAvg: null,
+    fullMonthsCount: 0,
+    yearlyExpensesAvg: null,
+    yearlyIncomeAvg: null,
+    yearlyNetAvg: null,
+    fullYearsCount: 0,
+    weeklyExpensesAvg: null,
+    weeklyIncomeAvg: null,
+    weeklyNetAvg: null,
+    fullWeeksCount: 0,
+    categoryMonthlyAvg: {}
+  };
+
+  const validTxs = (transactions || []).filter(t => t.status !== 'hidden' && !isInitialBalanceTx(t));
+  if (validTxs.length === 0) {
+    return emptyResult;
+  }
+
+  const earliestTimestamp = Math.min(...validTxs.map(t => t.date));
+  const earliest = new Date(earliestTimestamp);
+  const now = referenceDate;
+
+  // 1. Full Months Calculation:
+  // Skip the first month in which transactions started, and skip the ongoing current month.
+  const fullMonths: { start: number; end: number; key: string }[] = [];
+  let curMonth = new Date(earliest.getFullYear(), earliest.getMonth() + 1, 1, 0, 0, 0, 0);
+  const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0).getTime();
+
+  while (curMonth.getTime() < currentMonthStart) {
+    const y = curMonth.getFullYear();
+    const m = curMonth.getMonth();
+    const start = new Date(y, m, 1, 0, 0, 0, 0).getTime();
+    const end = new Date(y, m + 1, 0, 23, 59, 59, 999).getTime();
+    fullMonths.push({
+      start,
+      end,
+      key: `${y}-${String(m + 1).padStart(2, '0')}`
+    });
+    curMonth = new Date(y, m + 1, 1, 0, 0, 0, 0);
+  }
+
+  let monthlyExpensesAvg: number | null = null;
+  let monthlyIncomeAvg: number | null = null;
+  let monthlyNetAvg: number | null = null;
+  const categoryMonthlyAvg: Record<string, number | null> = {};
+
+  if (fullMonths.length > 0) {
+    let totalExpenses = 0;
+    let totalIncome = 0;
+    const catExpensesSum: Record<string, number> = {};
+
+    fullMonths.forEach(fm => {
+      const monthTxs = validTxs.filter(t => t.date >= fm.start && t.date <= fm.end);
+      monthTxs.forEach(t => {
+        if (t.type === 'expense' || t.type === 'subscription') {
+          totalExpenses += t.amount;
+          if (t.categoryId) {
+            catExpensesSum[t.categoryId] = (catExpensesSum[t.categoryId] || 0) + t.amount;
+          }
+        } else if (t.type === 'income') {
+          totalIncome += t.amount;
+        }
+      });
+    });
+
+    monthlyExpensesAvg = totalExpenses / fullMonths.length;
+    monthlyIncomeAvg = totalIncome / fullMonths.length;
+    monthlyNetAvg = (totalIncome - totalExpenses) / fullMonths.length;
+
+    Object.keys(catExpensesSum).forEach(catId => {
+      categoryMonthlyAvg[catId] = catExpensesSum[catId] / fullMonths.length;
+    });
+  }
+
+  // 2. Full Years Calculation:
+  // Skip the first year in which transactions started, and skip the ongoing current year.
+  const fullYears: { start: number; end: number; year: number }[] = [];
+  for (let y = earliest.getFullYear() + 1; y < now.getFullYear(); y++) {
+    fullYears.push({
+      year: y,
+      start: new Date(y, 0, 1, 0, 0, 0, 0).getTime(),
+      end: new Date(y, 11, 31, 23, 59, 59, 999).getTime()
+    });
+  }
+
+  let yearlyExpensesAvg: number | null = null;
+  let yearlyIncomeAvg: number | null = null;
+  let yearlyNetAvg: number | null = null;
+
+  if (fullYears.length > 0) {
+    let totalExpenses = 0;
+    let totalIncome = 0;
+
+    fullYears.forEach(fy => {
+      const yearTxs = validTxs.filter(t => t.date >= fy.start && t.date <= fy.end);
+      yearTxs.forEach(t => {
+        if (t.type === 'expense' || t.type === 'subscription') {
+          totalExpenses += t.amount;
+        } else if (t.type === 'income') {
+          totalIncome += t.amount;
+        }
+      });
+    });
+
+    yearlyExpensesAvg = totalExpenses / fullYears.length;
+    yearlyIncomeAvg = totalIncome / fullYears.length;
+    yearlyNetAvg = (totalIncome - totalExpenses) / fullYears.length;
+  }
+
+  // 3. Full Weeks Calculation:
+  // Skip first partial week and current ongoing week
+  const firstWeekEnd = new Date(earliest);
+  const dayOfWeek = firstWeekEnd.getDay();
+  const daysUntilNextMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
+  const firstFullWeekStart = new Date(earliest.getFullYear(), earliest.getMonth(), earliest.getDate() + daysUntilNextMonday, 0, 0, 0, 0);
+
+  const nowDayOfWeek = now.getDay();
+  const daysSinceMonday = nowDayOfWeek === 0 ? 6 : nowDayOfWeek - 1;
+  const currentWeekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysSinceMonday, 0, 0, 0, 0);
+
+  const fullWeeks: { start: number; end: number }[] = [];
+  let curWeek = new Date(firstFullWeekStart);
+  while (curWeek.getTime() + 7 * 86400000 <= currentWeekStart.getTime()) {
+    const start = curWeek.getTime();
+    const end = start + 7 * 86400000 - 1;
+    fullWeeks.push({ start, end });
+    curWeek = new Date(curWeek.getTime() + 7 * 86400000);
+  }
+
+  let weeklyExpensesAvg: number | null = null;
+  let weeklyIncomeAvg: number | null = null;
+  let weeklyNetAvg: number | null = null;
+
+  if (fullWeeks.length > 0) {
+    let totalExpenses = 0;
+    let totalIncome = 0;
+    fullWeeks.forEach(fw => {
+      const weekTxs = validTxs.filter(t => t.date >= fw.start && t.date <= fw.end);
+      weekTxs.forEach(t => {
+        if (t.type === 'expense' || t.type === 'subscription') {
+          totalExpenses += t.amount;
+        } else if (t.type === 'income') {
+          totalIncome += t.amount;
+        }
+      });
+    });
+    weeklyExpensesAvg = totalExpenses / fullWeeks.length;
+    weeklyIncomeAvg = totalIncome / fullWeeks.length;
+    weeklyNetAvg = (totalIncome - totalExpenses) / fullWeeks.length;
+  }
+
+  return {
+    monthlyExpensesAvg,
+    monthlyIncomeAvg,
+    monthlyNetAvg,
+    fullMonthsCount: fullMonths.length,
+    yearlyExpensesAvg,
+    yearlyIncomeAvg,
+    yearlyNetAvg,
+    fullYearsCount: fullYears.length,
+    weeklyExpensesAvg,
+    weeklyIncomeAvg,
+    weeklyNetAvg,
+    fullWeeksCount: fullWeeks.length,
+    categoryMonthlyAvg
   };
 }

@@ -3,8 +3,8 @@ import { RecurringTransaction } from '../../types';
 import { useData } from '../../providers/DataProvider';
 import { formatCurrency, formatDate, cn } from '../../lib/utils';
 import { 
-  Repeat, Calendar, CreditCard, Layers, Edit3, Trash2, 
-  ArrowUpRight, ArrowDownLeft, ArrowRightLeft, Plus, Play, Pause, AlertCircle 
+  Repeat, Calendar, CreditCard, Edit3, Trash2, 
+  ArrowUpRight, ArrowDownLeft, ArrowRightLeft, Plus, Play, Pause
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { TransactionForm } from './TransactionForm';
@@ -27,14 +27,14 @@ export function RecurringList({
     return sortRecurringByNextDate(recurringTransactions);
   }, [recurringTransactions]);
 
-  const getPeriodLabel = (days: number) => {
+  const getPeriodBadge = (days: number) => {
     switch (days) {
-      case 7: return 'Every 7 days (Weekly)';
-      case 14: return 'Every 14 days (Bi-weekly)';
-      case 30: return 'Every 30 days (Monthly)';
-      case 90: return 'Every 90 days (Quarterly)';
-      case 365: return 'Every 365 days (Yearly)';
-      default: return `Every ${days} days`;
+      case 7: return 'Weekly';
+      case 14: return 'Bi-weekly';
+      case 30: return 'Monthly';
+      case 90: return 'Quarterly';
+      case 365: return 'Yearly';
+      default: return `Every ${days}d`;
     }
   };
 
@@ -83,106 +83,131 @@ export function RecurringList({
           <div 
             key={rule.id} 
             className={cn(
-              "p-4 flex items-center justify-between gap-4 group transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02]",
-              !isActive && "opacity-40 grayscale"
+              "p-4 sm:p-5 transition-colors hover:bg-black/[0.015] dark:hover:bg-white/[0.015] flex flex-col gap-3",
+              !isActive && "opacity-50"
             )}
           >
-            <div className="flex items-center gap-4 flex-1 min-w-0">
-              <div className={cn(
-                "w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-sm",
-                isIncome ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" :
-                isTransfer ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" :
-                "bg-red-500/10 text-red-600 dark:text-red-400"
-              )}>
-                {isIncome ? <ArrowDownLeft size={18} /> : 
-                 isTransfer ? <ArrowRightLeft size={18} /> : 
-                 <ArrowUpRight size={18} />}
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                  <h4 className="font-bold text-sm text-foreground break-words">
-                    {rule.name}
-                  </h4>
-                  <span className={cn(
-                    "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1 shrink-0",
-                    isIncome ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" :
-                    isTransfer ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" :
-                    "bg-red-500/10 text-red-600 dark:text-red-400"
-                  )}>
-                    <Repeat size={10} /> {getPeriodLabel(rule.periodicityDays)}
-                  </span>
-                  {!isActive && (
-                    <span className="text-[8px] font-black uppercase tracking-widest bg-black/60 dark:bg-white/40 text-white dark:text-black px-1.5 py-0.5 rounded shrink-0">
-                      Paused
-                    </span>
-                  )}
+            {/* Top Row: Icon + Title & Frequency | Amount & Actions */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={cn(
+                  "w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-xs",
+                  isIncome ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" :
+                  isTransfer ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" :
+                  "bg-red-500/10 text-red-600 dark:text-red-400"
+                )}>
+                  {isIncome ? <ArrowDownLeft size={18} /> : 
+                   isTransfer ? <ArrowRightLeft size={18} /> : 
+                   <ArrowUpRight size={18} />}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 opacity-50 text-[11px] font-medium mt-1">
-                  <span className="flex items-center gap-1">
-                    <Calendar size={11} /> Start: {formatDate(rule.startDate)}
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1">
-                    Next due: <span className="font-semibold text-foreground">{formatDate(nextDueDate)}</span>
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1">
-                    <CreditCard size={11} /> {account?.name || 'No Account'}
-                    {isTransfer && transferAccount && (
-                      <>
-                        <ArrowRightLeft size={10} />
-                        <span>{transferAccount.name}</span>
-                      </>
-                    )}
-                  </span>
-                  {category && (
-                    <>
-                      <span>•</span>
-                      <span className="flex items-center gap-1">
-                        <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: category.color || '#888' }} />
-                        {category.label}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="font-bold text-sm sm:text-base text-foreground leading-snug break-words">
+                      {rule.name}
+                    </h4>
+                    {!isActive && (
+                      <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full shrink-0">
+                        Paused
                       </span>
-                    </>
-                  )}
+                    )}
+                  </div>
+
+                  {/* Clean Frequency Badge */}
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className={cn(
+                      "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md inline-flex items-center gap-1",
+                      isIncome ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" :
+                      isTransfer ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" :
+                      "bg-red-500/10 text-red-600 dark:text-red-400"
+                    )}>
+                      <Repeat size={10} />
+                      {getPeriodBadge(rule.periodicityDays)}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="text-right shrink-0 flex items-center gap-3">
-              <div>
-                <p className={cn(
-                  "font-bold text-lg",
+              {/* Top-Right: Amount & Quick Actions */}
+              <div className="flex flex-col items-end shrink-0 text-right">
+                <span className={cn(
+                  "font-bold text-base sm:text-lg tracking-tight whitespace-nowrap",
                   isIncome ? "text-emerald-600 dark:text-emerald-400" :
                   isTransfer ? "text-blue-600 dark:text-blue-400" :
                   "text-red-600 dark:text-red-400"
                 )}>
                   {isIncome ? '+' : isTransfer ? '' : '-'}{formatCurrency(rule.amount, settings.currency)}
-                </p>
-                <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                </span>
+
+                <div className="flex items-center gap-1 mt-1.5">
                   <button 
+                    type="button"
                     onClick={() => handleToggleActive(rule)} 
-                    className="p-1 hover:text-amber-500 transition-colors" 
-                    title={isActive ? "Pause recurring rule" : "Resume recurring rule"}
+                    className="w-7 h-7 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-foreground/60 hover:text-foreground flex items-center justify-center transition-colors cursor-pointer" 
+                    title={isActive ? "Pause rule" : "Resume rule"}
+                    aria-label={isActive ? "Pause rule" : "Resume rule"}
                   >
-                    {isActive ? <Pause size={14} /> : <Play size={14} />}
+                    {isActive ? <Pause size={12} /> : <Play size={12} />}
                   </button>
                   <button 
+                    type="button"
                     onClick={() => setEditingItem(rule)} 
-                    className="p-1 hover:text-blue-500 transition-colors" 
-                    title="Edit Recurring Rule"
+                    className="w-7 h-7 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-foreground/60 hover:text-foreground flex items-center justify-center transition-colors cursor-pointer" 
+                    title="Edit rule"
+                    aria-label="Edit rule"
                   >
-                    <Edit3 size={14} />
+                    <Edit3 size={12} />
                   </button>
                   <button 
+                    type="button"
                     onClick={() => setDeletingItem(rule)} 
-                    className="p-1 hover:text-red-500 transition-colors" 
-                    title="Delete Recurring Rule"
+                    className="w-7 h-7 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors cursor-pointer" 
+                    title="Delete rule"
+                    aria-label="Delete rule"
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={12} />
                   </button>
                 </div>
+              </div>
+            </div>
+
+            {/* Bottom Row: Consistently Aligned Properties Shelf */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-black/[0.02] dark:bg-white/[0.02] p-2.5 rounded-xl border border-black/5 dark:border-white/5">
+              {/* Schedule Column */}
+              <div className="flex items-center gap-2 text-[11px] text-foreground/70 min-w-0">
+                <Calendar size={13} className="opacity-40 shrink-0" />
+                <div className="flex items-center gap-1.5 truncate">
+                  <span className="opacity-40 text-[9px] font-bold uppercase tracking-wider">Start:</span>
+                  <span className="font-medium">{formatDate(rule.startDate)}</span>
+                  <span className="opacity-30 mx-0.5">|</span>
+                  <span className="opacity-40 text-[9px] font-bold uppercase tracking-wider">Next:</span>
+                  <strong className="font-bold text-foreground">{formatDate(nextDueDate)}</strong>
+                </div>
+              </div>
+
+              {/* Account / Category Column */}
+              <div className="flex items-center gap-2 text-[11px] text-foreground/70 min-w-0">
+                {isTransfer ? (
+                  <div className="flex items-center gap-1.5 truncate">
+                    <CreditCard size={13} className="opacity-40 shrink-0" />
+                    <span className="truncate font-medium">{account?.name || 'Account'}</span>
+                    <ArrowRightLeft size={10} className="opacity-40 shrink-0" />
+                    <span className="truncate font-medium">{transferAccount?.name || 'Account'}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 truncate">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <CreditCard size={13} className="opacity-40 shrink-0" />
+                      <span className="truncate font-medium">{account?.name || 'Account'}</span>
+                    </div>
+                    {category && (
+                      <div className="flex items-center gap-1 truncate shrink-0">
+                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: category.color || '#888' }} />
+                        <span className="truncate text-foreground/80 font-medium">{category.label}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -203,7 +228,7 @@ export function RecurringList({
       {/* Delete Confirmation Modal */}
       {deletingItem && (
         <Modal isOpen={!!deletingItem} onClose={() => setDeletingItem(null)} title="Delete Recurring Transaction">
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-1">
             <div className="flex items-center gap-3 text-red-500">
               <div className="w-10 h-10 rounded-2xl bg-red-500/10 flex items-center justify-center shrink-0">
                 <Trash2 size={20} />
@@ -215,10 +240,12 @@ export function RecurringList({
                 <p className="text-xs text-red-500 font-medium">This action cannot be undone.</p>
               </div>
             </div>
-            <p className="text-xs text-foreground/70 leading-relaxed">
-              Would you like to keep past generated transactions in your transaction history, or remove all history associated with this recurring rule?
+
+            <p className="text-xs text-foreground/70">
+              Choose whether to keep or remove previously generated transactions:
             </p>
-            <div className="flex flex-col gap-2.5 pt-2">
+
+            <div className="flex flex-col gap-2 pt-2">
               <Button 
                 variant="secondary" 
                 onClick={() => confirmDelete(false)}
