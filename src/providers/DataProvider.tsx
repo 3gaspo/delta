@@ -269,10 +269,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         if (firebaseReady && db && user) {
           const batch = writeBatch(db);
           newRecurringRules.forEach(r => {
-            batch.set(doc(db, `users/${uid}/recurring`, r.id), r);
+            batch.set(doc(db, `users/${uid}/recurring`, r.id), cleanData(r));
           });
           updatedTransactions.forEach(ut => {
-            batch.set(doc(db, `users/${uid}/transactions`, ut.id), ut);
+            batch.set(doc(db, `users/${uid}/transactions`, ut.id), cleanData(ut));
           });
           await batch.commit();
         } else {
@@ -443,13 +443,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         if (firebaseReady && db && user) {
           const batch = writeBatch(db);
           newTransactionsToCreate.forEach(nt => {
-            batch.set(doc(db, `users/${uid}/transactions`, nt.id), nt);
+            batch.set(doc(db, `users/${uid}/transactions`, nt.id), cleanData(nt));
           });
           recurringUpdates.forEach(ru => {
-            batch.update(doc(db, `users/${uid}/recurring`, ru.id), { 
+            batch.update(doc(db, `users/${uid}/recurring`, ru.id), cleanData({ 
               lastGeneratedDate: ru.lastGeneratedDate, 
               updatedAt: Date.now() 
-            });
+            }));
           });
           await batch.commit();
         } else {
@@ -475,11 +475,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [data.transactions, data.recurringTransactions, user, loading]);
 
-  const cleanData = (obj: any) => {
+  const cleanData = (obj: any): any => {
+    if (obj === null || obj === undefined) return null;
+    if (typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(cleanData);
     const clean: any = {};
     Object.keys(obj).forEach(key => {
-      if (obj[key] !== undefined) {
-        clean[key] = obj[key];
+      const val = obj[key];
+      if (val !== undefined) {
+        clean[key] = val !== null && typeof val === 'object' && !(val instanceof Date) ? cleanData(val) : val;
       }
     });
     return clean;
@@ -553,9 +557,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     if (firebaseReady && db) {
       const batch = writeBatch(db);
-      batch.set(doc(db, `users/${user.uid}/recurring`, id), rule);
+      batch.set(doc(db, `users/${user.uid}/recurring`, id), cleanData(rule));
       newTransactions.forEach(nt => {
-        batch.set(doc(db, `users/${user.uid}/transactions`, nt.id), nt);
+        batch.set(doc(db, `users/${user.uid}/transactions`, nt.id), cleanData(nt));
       });
       await batch.commit();
     } else {
@@ -600,9 +604,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     if (firebaseReady && db) {
       const batch = writeBatch(db);
-      batch.set(doc(db, `users/${user.uid}/recurring`, id), updatedRule);
+      batch.set(doc(db, `users/${user.uid}/recurring`, id), cleanData(updatedRule));
       newTransactions.forEach(nt => {
-        batch.set(doc(db, `users/${user.uid}/transactions`, nt.id), nt);
+        batch.set(doc(db, `users/${user.uid}/transactions`, nt.id), cleanData(nt));
       });
       await batch.commit();
     } else {

@@ -115,12 +115,11 @@ export function generateDueTransactions(
       // Recurring transactions are always added at the first instant of that day (00:00:00)
       const txDateObj = new Date(candObj.getFullYear(), candObj.getMonth(), candObj.getDate(), 0, 0, 0, 0);
       const startOfDayTime = txDateObj.getTime();
-      newTransactions.push({
+      const tx: Transaction = {
         id: crypto.randomUUID(),
         amount: rule.amount,
         date: startOfDayTime,
         accountId: rule.accountId,
-        transferAccountId: rule.transferAccountId,
         categoryId: rule.categoryId || '',
         tagIds: rule.tagIds || [],
         type: rule.type,
@@ -130,7 +129,11 @@ export function generateDueTransactions(
         recurringId: rule.id,
         createdAt: startOfDayTime,
         updatedAt: startOfDayTime
-      });
+      };
+      if (rule.transferAccountId) {
+        tx.transferAccountId = rule.transferAccountId;
+      }
+      newTransactions.push(tx);
       existingDates.add(dateKey);
       lastGenerated = startOfDayTime;
     } else {
