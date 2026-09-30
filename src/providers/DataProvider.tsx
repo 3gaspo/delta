@@ -48,6 +48,26 @@ const DEFAULT_TAGS = [
 
 export const isUncategorizedCategory = (label?: string) => (label || '').trim().toLowerCase() === 'uncategorized';
 
+/**
+ * Strips all undefined fields recursively so Firestore WriteBatch/setDoc/updateDoc never throw
+ */
+export function sanitizeFirestoreData<T = any>(obj: T): T {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(item => sanitizeFirestoreData(item)) as any;
+  }
+  const clean: Record<string, any> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val !== undefined) {
+      clean[key] = val !== null && typeof val === 'object' && !(val instanceof Date)
+        ? sanitizeFirestoreData(val)
+        : val;
+    }
+  }
+  return clean as T;
+}
+
 export const dedupeAndSortCategories = (cats: Category[]): Category[] => {
   const seen = new Set<string>();
   const nonUncategorized: Category[] = [];
@@ -236,14 +256,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           const pDays = t.periodicityDays || 30;
           const ruleType = t.type === 'subscription' ? 'expense' : t.type;
 
-          newRecurringRules.push({
+          const newRule: RecurringTransaction = {
             id: ruleId,
             name: t.name,
             amount: t.amount,
             startDate: t.date,
             periodicityDays: pDays,
             accountId: t.accountId,
-            transferAccountId: t.transferAccountId,
             categoryId: t.categoryId,
             tagIds: t.tagIds || [],
             type: ruleType,
@@ -253,26 +272,34 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             active: true,
             createdAt: t.createdAt || now,
             updatedAt: now
-          });
+          };
+          if (t.transferAccountId) {
+            newRule.transferAccountId = t.transferAccountId;
+          }
+          newRecurringRules.push(newRule);
 
           // Convert original transaction to a normal occurrence
-          updatedTransactions.push({
+          const updatedTx: any = {
             ...t,
             type: ruleType,
             recurringId: ruleId,
-            periodicityDays: undefined,
-            lastGeneratedDate: undefined,
             updatedAt: now
-          });
+          };
+          delete updatedTx.periodicityDays;
+          delete updatedTx.lastGeneratedDate;
+          if (!updatedTx.transferAccountId) {
+            delete updatedTx.transferAccountId;
+          }
+          updatedTransactions.push(updatedTx);
         }
 
         if (firebaseReady && db && user) {
           const batch = writeBatch(db);
           newRecurringRules.forEach(r => {
-            batch.set(doc(db, `users/${uid}/recurring`, r.id), cleanData(r));
+            batch.set(doc(db, `users/${uid}/recurring`, r.id), sanitizeFirestoreData(r));
           });
           updatedTransactions.forEach(ut => {
-            batch.set(doc(db, `users/${uid}/transactions`, ut.id), cleanData(ut));
+            batch.set(doc(db, `users/${uid}/transactions`, ut.id), sanitizeFirestoreData(ut));
           });
           await batch.commit();
         } else {
@@ -475,19 +502,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [data.transactions, data.recurringTransactions, user, loading]);
 
-  const cleanData = (obj: any): any => {
-    if (obj === null || obj === undefined) return null;
-    if (typeof obj !== 'object') return obj;
-    if (Array.isArray(obj)) return obj.map(cleanData);
-    const clean: any = {};
-    Object.keys(obj).forEach(key => {
-      const val = obj[key];
-      if (val !== undefined) {
-        clean[key] = val !== null && typeof val === 'object' && !(val instanceof Date) ? cleanData(val) : val;
-      }
-    });
-    return clean;
-  };
+  const cleanData = sanitizeFirestoreData;
 
   // Actions
   const addTransaction = async (t: any) => {
@@ -542,6 +557,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       updatedAt: now
     };
 
+    if (rule.type !== 'transfer') {
+      delete rule.transferAccountId;
+    }
+
     // Immediately generate any past/current occurrences up to now
     const { newTransactions, updatedLastGeneratedDate } = generateDueTransactions(
       rule,
@@ -590,6 +609,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       ...cleanData(r),
       updatedAt: now
     };
+
+    if (updatedRule.type !== 'transfer') {
+      delete updatedRule.transferAccountId;
+    }
 
     // Check if new occurrences are due
     const { newTransactions, updatedLastGeneratedDate } = generateDueTransactions(

@@ -289,10 +289,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
           tagIds: finalTagIds,
           type: formData.type,
           status: formData.status,
-          description: formData.description.trim(),
-          periodicityDays: undefined,
-          lastGeneratedDate: undefined,
-          transferAccountId: undefined
+          description: formData.description.trim()
         };
 
         if (initialRecurringData) {

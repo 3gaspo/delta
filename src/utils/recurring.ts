@@ -88,12 +88,15 @@ export function generateDueTransactions(
 
   const hasOccurrences = existingDates.size > 0;
 
-  // If occurrences already exist, candidate starts at next period from lastGeneratedDate.
-  // If no occurrences exist yet (e.g. newly created rule, or first occurrence due today),
-  // candidate starts at rule.startDate!
-  let candidateDate = (rule.lastGeneratedDate && hasOccurrences)
-    ? getNextPeriodDate(rule.lastGeneratedDate, rule.periodicityDays)
-    : rule.startDate;
+  // Candidate start date:
+  // If occurrences exist and startDate is at or after lastGeneratedDate,
+  // we can fast-forward from getNextPeriodDate(rule.lastGeneratedDate).
+  // Otherwise (new rule, no occurrences yet, or startDate moved backwards into the past),
+  // start from rule.startDate to generate all due/missing occurrences!
+  let candidateDate = rule.startDate;
+  if (rule.lastGeneratedDate && hasOccurrences && rule.startDate >= rule.lastGeneratedDate) {
+    candidateDate = getNextPeriodDate(rule.lastGeneratedDate, rule.periodicityDays);
+  }
 
   // Ensure cutoff includes the entire current calendar day of upToDate (23:59:59.999 local time)
   // so any transaction due today (regardless of hour created or timezone) is generated!
