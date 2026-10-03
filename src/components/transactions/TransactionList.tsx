@@ -6,7 +6,7 @@ import { Button } from '../ui/Base';
 import { startOfDay } from 'date-fns';
 import { 
   Trash2, Edit3, ArrowUpRight, ArrowDownLeft, ArrowRightLeft, 
-  AlignLeft, Repeat, Layers3, ChevronDown, ChevronUp, Layers 
+  AlignLeft, Repeat, Layers3, ChevronDown, ChevronUp, Layers, HandCoins, Users 
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { TransactionForm } from './TransactionForm';
@@ -20,6 +20,7 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
   const category = categories.find(c => c.id === transaction.categoryId);
   const account = accounts.find(a => a.id === transaction.accountId);
   const transferAccount = transaction.transferAccountId ? accounts.find(a => a.id === transaction.transferAccountId) : null;
+  const debtAccount = transaction.debtAccountId ? accounts.find(a => a.id === transaction.debtAccountId) : null;
 
   const isIncome = transaction.type === 'income';
   const isTransfer = transaction.type === 'transfer';
@@ -48,15 +49,15 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
 
   return (
     <div className={cn(
-      "p-4 border-b border-black/5 dark:border-white/5 last:border-0 flex items-center justify-between gap-4 group transition-opacity",
+      "p-3.5 sm:p-4 border-b border-black/5 dark:border-white/5 last:border-0 flex items-center justify-between gap-3 sm:gap-4 group transition-opacity",
       isHidden && "opacity-30 grayscale",
       isPending && "bg-amber-500/5"
     )}>
-      <div className="flex items-center gap-4 flex-1 min-w-0">
+      <div className="flex items-center gap-3 sm:gap-3.5 flex-1 min-w-0 overflow-hidden">
         <div className={cn(
-          "w-10 h-10 rounded-2xl flex items-center justify-center shrink-0",
+          "w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-xs",
           isIncome ? "bg-emerald-500/10 text-emerald-500" : 
-          isTransfer ? "bg-blue-500/10 text-blue-500" :
+          isTransfer ? "bg-blue-500/10 text-blue-500" : 
           "bg-red-500/10 text-red-500"
         )}>
           {isIncome ? <ArrowDownLeft size={18} /> : 
@@ -64,9 +65,12 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
            <ArrowUpRight size={18} />}
         </div>
         
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2 mb-0.5">
-            <h4 className="font-bold text-sm text-foreground break-words">
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 mb-1 overflow-hidden">
+            <h4 
+              className="font-bold text-sm text-foreground truncate min-w-0 shrink block"
+              title={transaction.name || category?.label || 'Untitled'}
+            >
               {transaction.name || category?.label || 'Untitled'}
             </h4>
             {isRecurring && (
@@ -76,7 +80,7 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
                 isTransfer ? "bg-blue-500/10 text-blue-600 dark:text-blue-400" :
                 "bg-red-500/10 text-red-600 dark:text-red-400"
               )}>
-                <Repeat size={10} /> {transaction.periodicityDays}d
+                <Repeat size={9} /> {transaction.periodicityDays}d
               </span>
             )}
             {isPending && (
@@ -86,65 +90,88 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
               <span className="text-[8px] font-black uppercase tracking-widest bg-black text-white px-1 rounded shrink-0">Hidden</span>
             )}
           </div>
-          {transaction.description && (
-            <p className="text-[10px] opacity-60 mb-1 truncate">{transaction.description}</p>
-          )}
-          <div className="flex items-center gap-1.5 opacity-40 text-[10px] font-medium uppercase tracking-wider flex-wrap">
-            <span>{timeFormatted ? timeFormatted : formatDate(transaction.date)}</span>
-            <span>•</span>
-            <span>{account?.name}</span>
-            {isTransfer && (
+
+          {/* Consistent details order: Account -> Category -> Debt -> Time */}
+          <div className="flex items-center gap-1.5 text-[11px] text-foreground/60 min-w-0 truncate">
+            {/* 1. Account (Always first) */}
+            {isTransfer ? (
+              <span className="truncate font-medium text-foreground/80 flex items-center gap-1">
+                {account?.name || 'Account'}{account?.isShared && <Users size={10} className="text-sky-500 shrink-0" />} → {transferAccount?.name || 'Account'}{transferAccount?.isShared && <Users size={10} className="text-sky-500 shrink-0" />}
+              </span>
+            ) : (
+              <span className="truncate font-medium text-foreground/80 inline-flex items-center gap-1">
+                {account?.name || 'Account'}
+                {account?.isShared && <Users size={10} className="text-sky-500 shrink-0" title="Shared Account" />}
+              </span>
+            )}
+
+            {/* 2. Category */}
+            {!isTransfer && category && (
               <>
-                <ArrowRightLeft size={10} />
-                <span>{transferAccount?.name}</span>
+                <span className="opacity-25 shrink-0 text-[10px]">|</span>
+                <span className="truncate font-normal text-foreground/70">
+                  {category.label}
+                </span>
               </>
             )}
-            {category && !isTransfer && (
+
+            {/* 3. Debt Link */}
+            {debtAccount && (
               <>
-                <span>•</span>
-                <span className="inline-flex items-center gap-1">
-                  <span 
-                    className="w-1.5 h-1.5 rounded-full inline-block shrink-0" 
-                    style={{ backgroundColor: category.color || '#888' }} 
-                  />
-                  <span>{category.label}</span>
+                <span className="opacity-25 shrink-0 text-[10px]">|</span>
+                <span className="truncate text-purple-600 dark:text-purple-400 font-semibold inline-flex items-center gap-1 shrink-0">
+                  <HandCoins size={11} className="shrink-0" />
+                  {debtAccount.debtDirection === 'receivable' ? `Owed by ${debtAccount.name}` : `Owed to ${debtAccount.name}`}
                 </span>
+              </>
+            )}
+
+            {/* 4. Time */}
+            {timeFormatted && (
+              <>
+                <span className="opacity-25 shrink-0 text-[10px]">|</span>
+                <span className="shrink-0 text-[10px] opacity-40 font-mono">{timeFormatted}</span>
               </>
             )}
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 sm:gap-4 shrink-0 text-right">
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0 text-right ml-1 sm:ml-2">
         <div>
           <p className={cn(
-            "font-bold text-base sm:text-lg tracking-tight",
+            "font-bold text-base sm:text-lg tracking-tight whitespace-nowrap min-w-[70px]",
             isIncome ? "text-emerald-500" : 
             isTransfer ? "text-blue-500" : 
             "text-red-500"
           )}>
             {isIncome ? '+' : isTransfer ? '' : '-'}{formatCurrency(transaction.amount, settings.currency)}
           </p>
+          {transaction.myShareAmount !== undefined && transaction.myShareAmount !== transaction.amount && (
+            <span className="text-[10px] font-bold text-foreground/50 block">
+              My share: {formatCurrency(transaction.myShareAmount, settings.currency)}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
           <button 
             type="button"
             onClick={() => setIsEditing(true)} 
-            className="w-8 h-8 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-foreground/70 hover:text-foreground flex items-center justify-center transition-colors cursor-pointer" 
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-foreground/70 hover:text-foreground flex items-center justify-center transition-colors cursor-pointer" 
             title="Edit"
             aria-label="Edit"
           >
-            <Edit3 size={14} />
+            <Edit3 size={13} />
           </button>
           <button 
             type="button"
             onClick={() => setIsDeleting(true)} 
-            className="w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors cursor-pointer" 
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors cursor-pointer" 
             title="Delete"
             aria-label="Delete"
           >
-            <Trash2 size={14} />
+            <Trash2 size={13} />
           </button>
         </div>
       </div>
@@ -229,6 +256,12 @@ export function GroupTransactionItem({
       .filter(Boolean)
   ));
 
+  const linkedDebtNames = Array.from(new Set(
+    subtransactions
+      .map(st => st.debtAccountId ? accounts.find(a => a.id === st.debtAccountId)?.name : null)
+      .filter(Boolean)
+  ));
+
   const handleDelete = async () => {
     try {
       setDeletingLoading(true);
@@ -249,32 +282,55 @@ export function GroupTransactionItem({
 
   return (
     <div className="border-b border-black/5 dark:border-white/5 last:border-0">
-      <div className="p-4 flex items-center justify-between gap-4 group transition-colors hover:bg-purple-500/5">
-        <div className="flex items-center gap-4 flex-1 min-w-0 cursor-pointer" onClick={() => setExpanded(!expanded)}>
-          <div className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+      <div className="p-3.5 sm:p-4 flex items-center justify-between gap-3 sm:gap-4 group transition-colors hover:bg-purple-500/5">
+        <div className="flex items-center gap-3 sm:gap-3.5 flex-1 min-w-0 cursor-pointer overflow-hidden" onClick={() => setExpanded(!expanded)}>
+          <div className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 shadow-xs">
             <Layers3 size={18} />
           </div>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h4 className="font-bold truncate">{sharedName}</h4>
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 mb-1 overflow-hidden">
+              <h4 className="font-bold text-sm text-foreground truncate min-w-0 shrink block" title={sharedName}>
+                {sharedName}
+              </h4>
               <span className="text-[8px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-600 dark:text-purple-300 px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0">
-                <Layers size={10} /> {subtransactions.length} items
+                <Layers size={9} /> {subtransactions.length} items
               </span>
             </div>
-            <div className="flex items-center gap-1.5 opacity-60 text-[10px] font-medium uppercase tracking-wider mt-0.5">
-              <span>{timeFormatted ? timeFormatted : formatDate(sharedDate)}</span>
-              <span>•</span>
-              <span className="truncate">{uniqueCategoryLabels.join(', ') || 'Group Categories'}</span>
-              <span>•</span>
-              <span className="truncate">{uniqueAccountNames.join(', ') || 'Accounts'}</span>
+
+            {/* Consistent details order: Account -> Categories -> Debt -> Time */}
+            <div className="flex items-center gap-1.5 text-[11px] text-foreground/60 min-w-0 truncate">
+              {/* 1. Account */}
+              {uniqueAccountNames.length > 0 && (
+                <span className="truncate font-medium text-foreground/80">
+                  {uniqueAccountNames.join(', ')}
+                </span>
+              )}
+
+              {/* 2. Categories */}
+              {uniqueCategoryLabels.length > 0 && (
+                <>
+                  {uniqueAccountNames.length > 0 && <span className="opacity-25 shrink-0 text-[10px]">|</span>}
+                  <span className="truncate font-normal text-foreground/70">
+                    {uniqueCategoryLabels.join(', ')}
+                  </span>
+                </>
+              )}
+
+              {/* 3. Time */}
+              {timeFormatted && (
+                <>
+                  <span className="opacity-25 shrink-0 text-[10px]">|</span>
+                  <span className="shrink-0 text-[10px] opacity-40 font-mono">{timeFormatted}</span>
+                </>
+              )}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 sm:gap-4 shrink-0 text-right">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0 text-right ml-1 sm:ml-2">
           <div>
-            <p className="font-bold text-base sm:text-lg text-purple-600 dark:text-purple-400 tracking-tight">
+            <p className="font-bold text-base sm:text-lg text-purple-600 dark:text-purple-400 tracking-tight whitespace-nowrap min-w-[70px]">
               {totalAmount < 0 ? '+' : '-'}{formatCurrency(Math.abs(totalAmount), settings.currency)}
             </p>
           </div>
@@ -283,29 +339,29 @@ export function GroupTransactionItem({
             <button 
               type="button"
               onClick={() => setExpanded(!expanded)} 
-              className="w-8 h-8 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center transition-colors cursor-pointer" 
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center transition-colors cursor-pointer" 
               title={expanded ? "Collapse" : "Expand"}
               aria-label={expanded ? "Collapse" : "Expand"}
             >
-              {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
             </button>
             <button 
               type="button"
               onClick={() => setIsEditing(true)} 
-              className="w-8 h-8 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-foreground/70 hover:text-foreground flex items-center justify-center transition-colors cursor-pointer" 
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-foreground/70 hover:text-foreground flex items-center justify-center transition-colors cursor-pointer" 
               title="Edit Group"
               aria-label="Edit Group"
             >
-              <Edit3 size={14} />
+              <Edit3 size={13} />
             </button>
             <button 
               type="button"
               onClick={() => setIsDeleting(true)} 
-              className="w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors cursor-pointer" 
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors cursor-pointer" 
               title="Delete Group"
               aria-label="Delete Group"
             >
-              <Trash2 size={14} />
+              <Trash2 size={13} />
             </button>
           </div>
         </div>
@@ -313,33 +369,40 @@ export function GroupTransactionItem({
 
       {/* Expanded Sub-transactions Breakdown */}
       {expanded && (
-        <div className="bg-black/5 dark:bg-white/5 px-6 py-3 space-y-2 border-t border-black/5 dark:border-white/5">
+        <div className="bg-black/5 dark:bg-white/5 px-4 sm:px-6 py-3 space-y-2 border-t border-black/5 dark:border-white/5">
           <p className="text-[9px] font-black uppercase tracking-widest opacity-40 mb-1">Sub-Transactions Details</p>
           {subtransactions.map((st, idx) => {
             const cat = categories.find(c => c.id === st.categoryId);
             const acc = accounts.find(a => a.id === st.accountId);
+            const stDebtAcc = st.debtAccountId ? accounts.find(a => a.id === st.debtAccountId) : null;
             const isInc = st.type === 'income';
 
             return (
-              <div key={st.id || idx} className="flex items-center justify-between text-xs py-1.5 border-b border-black/5 dark:border-white/5 last:border-0">
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <span 
-                    className="w-1.5 h-1.5 rounded-full shrink-0 shadow-sm" 
-                    style={{ backgroundColor: cat?.color || '#a855f7' }}
-                  />
-                  <span className="font-semibold truncate">
+              <div key={st.id || idx} className="flex items-center justify-between text-xs py-1.5 border-b border-black/5 dark:border-white/5 last:border-0 gap-3">
+                <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
+                  <span className="font-semibold truncate text-foreground/90">
                     {cat?.label || 'Uncategorized'}
                   </span>
-                  {st.description && (
-                    <span className="opacity-50 text-[10px] truncate">— {st.description}</span>
-                  )}
-                  <span className="text-[9px] opacity-40 px-1.5 py-0.5 bg-black/5 dark:bg-white/5 rounded">
-                    {acc?.name}
+                  <span className="text-[10px] opacity-50 truncate inline-flex items-center gap-0.5">
+                    ({acc?.name})
+                    {acc?.isShared && <Users size={10} className="text-sky-500 shrink-0" title="Shared Account" />}
                   </span>
+                  {stDebtAcc && (
+                    <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0">
+                      <HandCoins size={11} /> {stDebtAcc.debtDirection === 'receivable' ? `Owed by ${stDebtAcc.name}` : `Owed to ${stDebtAcc.name}`}
+                    </span>
+                  )}
                 </div>
-                <span className={cn("font-bold shrink-0 ml-2", isInc ? "text-emerald-500" : "text-red-500")}>
-                  {isInc ? '+' : '-'}{formatCurrency(st.amount, settings.currency)}
-                </span>
+                <div className="shrink-0 ml-2 text-right">
+                  <span className={cn("font-bold whitespace-nowrap block", isInc ? "text-emerald-500" : "text-red-500")}>
+                    {isInc ? '+' : '-'}{formatCurrency(st.amount, settings.currency)}
+                  </span>
+                  {st.myShareAmount !== undefined && st.myShareAmount !== st.amount && (
+                    <span className="text-[9px] font-bold text-foreground/50 block">
+                      My share: {formatCurrency(st.myShareAmount, settings.currency)}
+                    </span>
+                  )}
+                </div>
               </div>
             );
           })}
@@ -533,19 +596,14 @@ export function TransactionList({ transactions }: TransactionListProps) {
         <div key={group.dayTimestamp} className="space-y-1.5">
           {/* Day Header with slight separation */}
           <div className="flex items-center justify-between px-2 pt-0.5">
-            <div className="flex items-center gap-2">
-              <span className={cn(
-                "text-[11px] font-bold uppercase tracking-wider",
-                group.isToday 
-                  ? "text-foreground font-black" 
-                  : "opacity-40 text-foreground"
-              )}>
-                {group.label}
-              </span>
-              {group.isToday && (
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              )}
-            </div>
+            <span className={cn(
+              "text-[11px] font-bold uppercase tracking-wider",
+              group.isToday 
+                ? "text-foreground font-black" 
+                : "opacity-40 text-foreground"
+            )}>
+              {group.label}
+            </span>
             <span className="text-[10px] font-semibold opacity-30">
               {group.items.length} {group.items.length === 1 ? 'transaction' : 'transactions'}
             </span>

@@ -136,6 +136,9 @@ export function generateDueTransactions(
       if (rule.transferAccountId) {
         tx.transferAccountId = rule.transferAccountId;
       }
+      if (rule.debtAccountId) {
+        tx.debtAccountId = rule.debtAccountId;
+      }
       newTransactions.push(tx);
       existingDates.add(dateKey);
       lastGenerated = startOfDayTime;

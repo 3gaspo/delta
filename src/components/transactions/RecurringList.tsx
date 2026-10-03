@@ -4,7 +4,7 @@ import { useData } from '../../providers/DataProvider';
 import { formatCurrency, formatDate, cn } from '../../lib/utils';
 import { 
   Repeat, Calendar, CreditCard, Edit3, Trash2, 
-  ArrowUpRight, ArrowDownLeft, ArrowRightLeft, Plus, Play, Pause
+  ArrowUpRight, ArrowDownLeft, ArrowRightLeft, Plus, Play, Pause, Users
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { TransactionForm } from './TransactionForm';
@@ -101,9 +101,9 @@ export function RecurringList({
                    <ArrowUpRight size={18} />}
                 </div>
 
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h4 className="font-bold text-sm sm:text-base text-foreground leading-snug break-words">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h4 className="font-bold text-sm sm:text-base text-foreground leading-snug truncate min-w-0" title={rule.name}>
                       {rule.name}
                     </h4>
                     {!isActive && (
@@ -138,6 +138,11 @@ export function RecurringList({
                 )}>
                   {isIncome ? '+' : isTransfer ? '' : '-'}{formatCurrency(rule.amount, settings.currency)}
                 </span>
+                {rule.myShareAmount !== undefined && rule.myShareAmount !== rule.amount && (
+                  <span className="text-[10px] font-bold text-foreground/50 block">
+                    My share: {formatCurrency(rule.myShareAmount, settings.currency)}
+                  </span>
+                )}
 
                 <div className="flex items-center gap-1 mt-1.5">
                   <button 
@@ -198,11 +203,14 @@ export function RecurringList({
                   <div className="flex items-center gap-2 truncate">
                     <div className="flex items-center gap-1.5 truncate">
                       <CreditCard size={13} className="opacity-40 shrink-0" />
-                      <span className="truncate font-medium">{account?.name || 'Account'}</span>
+                      <span className="truncate font-medium flex items-center gap-1">
+                        {account?.name || 'Account'}
+                        {account?.isShared && <Users size={10} className="text-sky-500 shrink-0" title="Shared Account" />}
+                      </span>
                     </div>
                     {category && (
-                      <div className="flex items-center gap-1 truncate shrink-0">
-                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: category.color || '#888' }} />
+                      <div className="flex items-center gap-1.5 truncate shrink-0">
+                        <span className="opacity-20 text-[10px]">|</span>
                         <span className="truncate text-foreground/80 font-medium">{category.label}</span>
                       </div>
                     )}

@@ -5,7 +5,7 @@ import { Button, Input, Select } from '../ui/Base';
 import { 
   Calendar, Tag, CreditCard, Layers, AlignLeft, 
   ArrowRightLeft, Repeat, Plus, Trash2, Layers3,
-  ArrowUpRight, ArrowDownLeft, Receipt
+  ArrowUpRight, ArrowDownLeft, Receipt, HandCoins, Users
 } from 'lucide-react';
 import { parseMoney, formatCurrency, cn } from '../../lib/utils';
 
@@ -27,6 +27,9 @@ interface SubTransactionItem {
   categoryId: string;
   tagsInput: string;
   description: string;
+  debtAccountId?: string;
+  myShareRatio?: number;
+  myShareAmount?: string;
 }
 
 export function TransactionForm({ onClose, initialData, initialRecurringData, defaultMode, allowedModes }: TransactionFormProps) {
@@ -99,21 +102,21 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
 
   const [mode, setMode] = useState<FormTabMode>(initialMode);
 
-  const getTodayDateStr = () => {
-    const d = new Date();
+  const formatDateToLocalInputStr = (timestamp: number) => {
+    const d = new Date(timestamp);
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
   };
 
-  const todayStr = getTodayDateStr();
+  const todayStr = formatDateToLocalInputStr(Date.now());
 
   // Common shared state
   const rawAmount = initialRecurringData?.amount ?? initialData?.amount;
   const rawDate = initialRecurringData?.startDate ?? initialData?.date;
   const initialDateStr = rawDate 
-    ? new Date(rawDate).toISOString().split('T')[0] 
+    ? formatDateToLocalInputStr(rawDate) 
     : todayStr;
   const rawAccId = initialRecurringData?.accountId ?? initialData?.accountId ?? accounts[0]?.id ?? '';
   const rawCatId = initialRecurringData?.categoryId ?? initialData?.categoryId ?? availableCategories.find(c => c.label === 'Uncategorized')?.id ?? availableCategories[0]?.id ?? '';
@@ -122,6 +125,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
   const rawStatus = initialRecurringData?.status ?? initialData?.status ?? 'normal';
   const rawDesc = initialRecurringData?.description ?? initialData?.description ?? '';
   const rawTransferAccId = initialRecurringData?.transferAccountId ?? initialData?.transferAccountId ?? accounts.find(a => a.id !== rawAccId)?.id ?? '';
+  const rawDebtAccId = initialRecurringData?.debtAccountId ?? initialData?.debtAccountId ?? '';
 
   const [formData, setFormData] = useState({
     amount: rawAmount ? rawAmount.toString() : '',
@@ -133,7 +137,28 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
     type: ((initialRecurringData?.type === 'income' || initialData?.type === 'income') ? 'income' : 'expense') as 'expense' | 'income',
     status: rawStatus as TransactionStatus,
     description: rawDesc,
-    transferAccountId: rawTransferAccId
+    transferAccountId: rawTransferAccId,
+    debtAccountId: rawDebtAccId
+  });
+
+  const debtAccounts = useMemo(() => accounts.filter(a => a.type === 'debt'), [accounts]);
+  const regularAccounts = useMemo(() => accounts.filter(a => a.type !== 'debt'), [accounts]);
+
+  const selectedAccount = useMemo(() => accounts.find(a => a.id === formData.accountId), [accounts, formData.accountId]);
+  const isSelectedAccountShared = Boolean(selectedAccount?.isShared);
+
+  const [myShareRatio, setMyShareRatio] = useState<number>(() => {
+    return initialRecurringData?.myShareRatio ?? initialData?.myShareRatio ?? selectedAccount?.defaultMyShareRatio ?? 0.5;
+  });
+
+  const [myShareAmount, setMyShareAmount] = useState<string>(() => {
+    if (initialRecurringData?.myShareAmount !== undefined) return initialRecurringData.myShareAmount.toString();
+    if (initialData?.myShareAmount !== undefined) return initialData.myShareAmount.toString();
+    if (rawAmount && selectedAccount?.isShared) {
+      const parsed = parseMoney(rawAmount.toString());
+      if (parsed > 0) return (parsed * (initialData?.myShareRatio ?? selectedAccount?.defaultMyShareRatio ?? 0.5)).toFixed(2);
+    }
+    return '';
   });
 
   // Subscription specific state
@@ -189,12 +214,15 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
         accountId: t.accountId,
         categoryId: t.categoryId || defaultSubCat,
         tagsInput: t.tagIds.map(tid => tags.find(tg => tg.id === tid)?.label).filter(Boolean).join(', '),
-        description: t.description || ''
+        description: t.description || '',
+        debtAccountId: t.debtAccountId || '',
+        myShareRatio: t.myShareRatio,
+        myShareAmount: t.myShareAmount !== undefined ? t.myShareAmount.toString() : ''
       }));
     }
     return [
-      { amount: '', type: 'expense', accountId: defaultAcc, categoryId: defaultSubCat, tagsInput: '', description: '' },
-      { amount: '', type: 'expense', accountId: defaultAcc, categoryId: defaultSubCat, tagsInput: '', description: '' }
+      { amount: '', type: 'expense', accountId: defaultAcc, categoryId: defaultSubCat, tagsInput: '', description: '', debtAccountId: '', myShareRatio: accounts.find(a => a.id === defaultAcc)?.defaultMyShareRatio ?? 0.5, myShareAmount: '' },
+      { amount: '', type: 'expense', accountId: defaultAcc, categoryId: defaultSubCat, tagsInput: '', description: '', debtAccountId: '', myShareRatio: accounts.find(a => a.id === defaultAcc)?.defaultMyShareRatio ?? 0.5, myShareAmount: '' }
     ];
   });
 
@@ -211,7 +239,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
   const handleAddSubTransaction = () => {
     setSubTransactions([
       ...subTransactions,
-      { amount: '', type: 'expense', accountId: defaultAcc, categoryId: defaultSubCat, tagsInput: '', description: '' }
+      { amount: '', type: 'expense', accountId: defaultAcc, categoryId: defaultSubCat, tagsInput: '', description: '', debtAccountId: '' }
     ]);
   };
 
@@ -222,6 +250,31 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
 
   const handleUpdateSubTransaction = (index: number, fields: Partial<SubTransactionItem>) => {
     setSubTransactions(subTransactions.map((st, i) => i === index ? { ...st, ...fields } : st));
+  };
+
+  const handleAmountChange = (newAmount: string) => {
+    setFormData(prev => ({ ...prev, amount: newAmount }));
+    if (isSelectedAccountShared) {
+      const parsed = parseMoney(newAmount);
+      if (parsed > 0) {
+        setMyShareAmount((parsed * myShareRatio).toFixed(2));
+      } else {
+        setMyShareAmount('');
+      }
+    }
+  };
+
+  const handleAccountChange = (newAccId: string) => {
+    const acc = accounts.find(a => a.id === newAccId);
+    setFormData(prev => ({ ...prev, accountId: newAccId }));
+    if (acc?.isShared) {
+      const ratio = acc.defaultMyShareRatio ?? 0.5;
+      setMyShareRatio(ratio);
+      const parsed = parseMoney(formData.amount);
+      if (parsed > 0) {
+        setMyShareAmount((parsed * ratio).toFixed(2));
+      }
+    }
   };
 
   // Process tag string into tag IDs
@@ -245,9 +298,30 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
   };
 
   const computeManualDate = (dateStr: string): number => {
+    // If modifying an existing transaction and the date day has not been changed:
+    if (rawDate && dateStr === initialDateStr) {
+      return rawDate;
+    }
+
     const [year, month, day] = dateStr.split('-').map(Number);
     const now = new Date();
 
+    // If modifying an existing transaction and the date day was changed to a different day:
+    // Preserve the original time of day on the newly selected day
+    if (rawDate) {
+      const origDate = new Date(rawDate);
+      return new Date(
+        year,
+        month - 1,
+        day,
+        origDate.getHours(),
+        origDate.getMinutes(),
+        origDate.getSeconds(),
+        origDate.getMilliseconds()
+      ).getTime();
+    }
+
+    // For brand new transactions:
     const isToday = (
       year === now.getFullYear() &&
       (month - 1) === now.getMonth() &&
@@ -255,11 +329,12 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
     );
 
     if (isToday) {
-      // Manually added transaction for today considers current time for recency ordering
+      // New transaction added for today uses current time
       return Date.now();
     }
 
-    return new Date(year, month - 1, day, 12, 0, 0, 0).getTime();
+    // For new transactions added on a past or future date, use start of day (00:00:00) so no artificial noon is added
+    return new Date(year, month - 1, day, 0, 0, 0, 0).getTime();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -291,6 +366,14 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
           status: formData.status,
           description: formData.description.trim()
         };
+        if (formData.debtAccountId) {
+          submission.debtAccountId = formData.debtAccountId;
+        }
+        if (isSelectedAccountShared) {
+          const parsedShare = parseMoney(myShareAmount);
+          submission.myShareAmount = parsedShare >= 0 ? parsedShare : amount * myShareRatio;
+          submission.myShareRatio = myShareRatio;
+        }
 
         if (initialRecurringData) {
           await addTransaction(submission);
@@ -319,7 +402,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
 
           const stTagIds = await processTags(st.tagsInput);
 
-          preparedSubtransactions.push({
+          const subTx: any = {
             id: st.id,
             groupId,
             name: formData.name.trim(),
@@ -331,7 +414,18 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             type: st.type,
             status: formData.status,
             description: st.description.trim()
-          });
+          };
+          if (st.debtAccountId) {
+            subTx.debtAccountId = st.debtAccountId;
+          }
+          const stAcc = accounts.find(a => a.id === st.accountId);
+          if (stAcc?.isShared) {
+            const parsedShare = parseMoney(st.myShareAmount || '');
+            const ratio = st.myShareRatio ?? stAcc.defaultMyShareRatio ?? 0.5;
+            subTx.myShareAmount = parsedShare >= 0 && st.myShareAmount ? parsedShare : amt * ratio;
+            subTx.myShareRatio = ratio;
+          }
+          preparedSubtransactions.push(subTx);
         }
 
         if (initialRecurringData) {
@@ -437,10 +531,12 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
           throw new Error('Please select a valid start date for the recurring subscription.');
         }
 
-        const recurringDoc = {
+        const recurringDoc: any = {
           name: formData.name.trim(),
           amount,
-          startDate: selectedDate.getTime(),
+          startDate: (initialRecurringData?.startDate && formData.date === initialDateStr) 
+            ? initialRecurringData.startDate 
+            : selectedDate.getTime(),
           accountId: formData.accountId,
           categoryId: formData.categoryId,
           tagIds: finalTagIds,
@@ -450,6 +546,14 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
           periodicityDays: periodNum,
           active: true
         };
+        if (formData.debtAccountId) {
+          recurringDoc.debtAccountId = formData.debtAccountId;
+        }
+        if (isSelectedAccountShared) {
+          const parsedShare = parseMoney(myShareAmount);
+          recurringDoc.myShareAmount = parsedShare >= 0 ? parsedShare : amount * myShareRatio;
+          recurringDoc.myShareRatio = myShareRatio;
+        }
 
         if (initialRecurringData) {
           await updateRecurringTransaction(initialRecurringData.id, recurringDoc);
@@ -674,7 +778,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 placeholder="0.00" 
                 type="text" 
                 value={formData.amount}
-                onChange={e => setFormData({ ...formData, amount: e.target.value })}
+                onChange={e => handleAmountChange(e.target.value)}
                 required
                 className={cn(
                   "text-2xl font-bold py-6",
@@ -714,13 +818,34 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 <Select 
                   icon={CreditCard}
                   value={formData.accountId}
-                  onChange={e => setFormData({ ...formData, accountId: e.target.value })}
+                  onChange={e => handleAccountChange(e.target.value)}
                   required
                 >
                   {accounts.length === 0 && <option value="">No Accounts Available</option>}
-                  {accounts.map(a => (
-                    <option key={a.id} value={a.id}>{a.name}</option>
-                  ))}
+                  {regularAccounts.length > 0 && debtAccounts.length > 0 ? (
+                    <>
+                      <optgroup label="Regular Accounts">
+                        {regularAccounts.map(a => (
+                          <option key={a.id} value={a.id}>
+                            {a.name}{a.isShared ? ' (Shared)' : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Debt Accounts">
+                        {debtAccounts.map(a => (
+                          <option key={a.id} value={a.id}>
+                            {a.name} ({a.debtDirection === 'receivable' ? 'Receivable' : 'Payable'})
+                          </option>
+                        ))}
+                      </optgroup>
+                    </>
+                  ) : (
+                    accounts.map(a => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}{a.isShared ? ' (Shared)' : ''}
+                      </option>
+                    ))
+                  )}
                 </Select>
               </label>
 
@@ -740,6 +865,110 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 </Select>
               </label>
             </div>
+
+            {/* Shared Account Split Control */}
+            {isSelectedAccountShared && (
+              <div className="p-4 bg-sky-500/5 border border-sky-500/15 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sky-600 dark:text-sky-400">
+                    <Users size={16} />
+                    <span className="text-xs font-bold uppercase tracking-wider">Shared Account Split</span>
+                  </div>
+                  <span className="text-[11px] font-semibold opacity-60">
+                    Account Total: {formatCurrency(parseMoney(formData.amount) || 0, settings.currency)}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {[
+                    { label: '50% (Half)', ratio: 0.5 },
+                    { label: '100% (Mine)', ratio: 1.0 },
+                    { label: 'Custom', ratio: 'custom' }
+                  ].map(opt => {
+                    const isSelected = opt.ratio === 'custom'
+                      ? (myShareRatio !== 0.5 && myShareRatio !== 1.0)
+                      : myShareRatio === opt.ratio;
+                    return (
+                      <button
+                        key={opt.label}
+                        type="button"
+                        onClick={() => {
+                          const parsedTotal = parseMoney(formData.amount) || 0;
+                          if (opt.ratio !== 'custom') {
+                            setMyShareRatio(opt.ratio as number);
+                            setMyShareAmount((parsedTotal * (opt.ratio as number)).toFixed(2));
+                          }
+                        }}
+                        className={cn(
+                          "px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer",
+                          isSelected
+                            ? "bg-sky-600 text-white"
+                            : "bg-sky-500/10 text-sky-700 dark:text-sky-300 hover:bg-sky-500/20"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 block mb-1">
+                      My Share (Personal Expense)
+                    </span>
+                    <Input
+                      placeholder="0.00"
+                      value={myShareAmount}
+                      onChange={e => {
+                        setMyShareAmount(e.target.value);
+                        const parsedShare = parseMoney(e.target.value);
+                        const parsedTotal = parseMoney(formData.amount) || 0;
+                        if (parsedTotal > 0 && parsedShare >= 0) {
+                          setMyShareRatio(parsedShare / parsedTotal);
+                        }
+                      }}
+                      className="font-bold text-sm"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 block mb-1">
+                      Others' Share
+                    </span>
+                    <div className="h-10 px-3 flex items-center rounded-xl bg-black/5 dark:bg-white/5 font-semibold text-sm opacity-70">
+                      {formatCurrency(
+                        Math.max(0, (parseMoney(formData.amount) || 0) - (parseMoney(myShareAmount) || 0)),
+                        settings.currency
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-foreground/50 leading-relaxed">
+                  Only your share ({formatCurrency(parseMoney(myShareAmount) || 0, settings.currency)}) is counted in your expenses, while the full {formatCurrency(parseMoney(formData.amount) || 0, settings.currency)} is deducted from {selectedAccount?.name}.
+                </p>
+              </div>
+            )}
+
+            <label className="block">
+              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Link to Debt</span>
+              {debtAccounts.length > 0 ? (
+                <Select
+                  icon={HandCoins}
+                  value={formData.debtAccountId}
+                  onChange={e => setFormData({ ...formData, debtAccountId: e.target.value })}
+                >
+                  <option value="">None</option>
+                  {debtAccounts.map(d => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.debtDirection === 'receivable' ? 'Receivable - Owed to you' : 'Payable - You owe'})
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <p className="text-xs text-foreground/40 italic py-1">No debt accounts</p>
+              )}
+            </label>
 
             <label className="block">
               <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Tags (comma separated)</span>
@@ -873,7 +1102,16 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                       <Input 
                         placeholder="0.00"
                         value={st.amount}
-                        onChange={e => handleUpdateSubTransaction(idx, { amount: e.target.value })}
+                        onChange={e => {
+                          const val = e.target.value;
+                          const stAcc = accounts.find(a => a.id === st.accountId);
+                          const ratio = st.myShareRatio ?? stAcc?.defaultMyShareRatio ?? 0.5;
+                          const parsed = parseMoney(val);
+                          handleUpdateSubTransaction(idx, { 
+                            amount: val,
+                            myShareAmount: stAcc?.isShared && parsed > 0 ? (parsed * ratio).toFixed(2) : st.myShareAmount
+                          });
+                        }}
                         required
                         className={cn(
                           "font-bold",
@@ -889,15 +1127,110 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                       <Select
                         icon={CreditCard}
                         value={st.accountId}
-                        onChange={e => handleUpdateSubTransaction(idx, { accountId: e.target.value })}
+                        onChange={e => {
+                          const newAccId = e.target.value;
+                          const newAcc = accounts.find(a => a.id === newAccId);
+                          const ratio = newAcc?.defaultMyShareRatio ?? 0.5;
+                          const parsed = parseMoney(st.amount) || 0;
+                          handleUpdateSubTransaction(idx, { 
+                            accountId: newAccId,
+                            myShareRatio: newAcc?.isShared ? ratio : undefined,
+                            myShareAmount: newAcc?.isShared && parsed > 0 ? (parsed * ratio).toFixed(2) : undefined
+                          });
+                        }}
                         required
                       >
                         {accounts.length === 0 && <option value="">No Accounts Available</option>}
-                        {accounts.map(a => (
-                          <option key={a.id} value={a.id}>{a.name}</option>
-                        ))}
+                        {regularAccounts.length > 0 && debtAccounts.length > 0 ? (
+                          <>
+                            <optgroup label="Regular Accounts">
+                              {regularAccounts.map(a => (
+                                <option key={a.id} value={a.id}>
+                                  {a.name}{a.isShared ? ' (Shared)' : ''}
+                                </option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="Debt Accounts">
+                              {debtAccounts.map(a => (
+                                <option key={a.id} value={a.id}>
+                                  {a.name} ({a.debtDirection === 'receivable' ? 'Receivable' : 'Payable'})
+                                </option>
+                              ))}
+                            </optgroup>
+                          </>
+                        ) : (
+                          accounts.map(a => (
+                            <option key={a.id} value={a.id}>
+                              {a.name}{a.isShared ? ' (Shared)' : ''}
+                            </option>
+                          ))
+                        )}
                       </Select>
                     </label>
+
+                    {/* Shared Account Split for this sub-transaction */}
+                    {accounts.find(a => a.id === st.accountId)?.isShared && (
+                      <div className="p-3 bg-sky-500/5 border border-sky-500/15 rounded-xl space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-sky-600 dark:text-sky-400 flex items-center gap-1.5">
+                            <Users size={13} /> Shared Split (My Share)
+                          </span>
+                          <span className="text-[10px] font-semibold opacity-60">
+                            Item: {formatCurrency(parseMoney(st.amount) || 0, settings.currency)}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5">
+                          {[
+                            { label: '50% (Half)', ratio: 0.5 },
+                            { label: '100% (Mine)', ratio: 1.0 }
+                          ].map(opt => {
+                            const stAcc = accounts.find(a => a.id === st.accountId);
+                            const currentRatio = st.myShareRatio ?? stAcc?.defaultMyShareRatio ?? 0.5;
+                            const isSelected = currentRatio === opt.ratio;
+                            return (
+                              <button
+                                key={opt.label}
+                                type="button"
+                                onClick={() => {
+                                  const amt = parseMoney(st.amount) || 0;
+                                  handleUpdateSubTransaction(idx, {
+                                    myShareRatio: opt.ratio,
+                                    myShareAmount: (amt * opt.ratio).toFixed(2)
+                                  });
+                                }}
+                                className={cn(
+                                  "px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer",
+                                  isSelected
+                                    ? "bg-sky-600 text-white"
+                                    : "bg-sky-500/10 text-sky-700 dark:text-sky-300 hover:bg-sky-500/20"
+                                )}
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+
+                          <div className="flex items-center gap-1 ml-auto">
+                            <span className="text-[9px] font-bold opacity-40 uppercase">My share:</span>
+                            <Input
+                              placeholder="0.00"
+                              value={st.myShareAmount ?? ''}
+                              onChange={e => {
+                                const val = e.target.value;
+                                const parsedShare = parseMoney(val);
+                                const amt = parseMoney(st.amount) || 0;
+                                handleUpdateSubTransaction(idx, {
+                                  myShareAmount: val,
+                                  myShareRatio: amt > 0 && parsedShare >= 0 ? parsedShare / amt : undefined
+                                });
+                              }}
+                              className="h-7 text-xs font-bold w-20 py-0 text-center"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     <label className="block">
                       <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Category</span>
@@ -913,6 +1246,26 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                             <option key={c.id} value={c.id}>{c.label}</option>
                           ))}
                       </Select>
+                    </label>
+
+                    <label className="block">
+                      <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Link to Debt</span>
+                      {debtAccounts.length > 0 ? (
+                        <Select
+                          icon={HandCoins}
+                          value={st.debtAccountId || ''}
+                          onChange={e => handleUpdateSubTransaction(idx, { debtAccountId: e.target.value })}
+                        >
+                          <option value="">None</option>
+                          {debtAccounts.map(d => (
+                            <option key={d.id} value={d.id}>
+                              {d.name} ({d.debtDirection === 'receivable' ? 'Receivable - Owed to you' : 'Payable - You owe'})
+                            </option>
+                          ))}
+                        </Select>
+                      ) : (
+                        <p className="text-xs text-foreground/40 italic py-1">No debt accounts</p>
+                      )}
                     </label>
 
                     <label className="block">
@@ -989,9 +1342,26 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                   required
                 >
                   {accounts.length === 0 && <option value="">No Accounts Available</option>}
-                  {accounts.map(a => (
-                    <option key={a.id} value={a.id}>{a.name}</option>
-                  ))}
+                  {regularAccounts.length > 0 && debtAccounts.length > 0 ? (
+                    <>
+                      <optgroup label="Regular Accounts">
+                        {regularAccounts.map(a => (
+                          <option key={a.id} value={a.id}>{a.name}</option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Debt Accounts">
+                        {debtAccounts.map(a => (
+                          <option key={a.id} value={a.id}>
+                            {a.name} ({a.debtDirection === 'receivable' ? 'Receivable' : 'Payable'})
+                          </option>
+                        ))}
+                      </optgroup>
+                    </>
+                  ) : (
+                    accounts.map(a => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))
+                  )}
                 </Select>
               </label>
 
@@ -1004,11 +1374,30 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                   required
                 >
                   <option value="">Select Destination</option>
-                  {accounts.map(a => (
-                    <option key={a.id} value={a.id} disabled={a.id === formData.accountId}>
-                      {a.name} {a.id === formData.accountId ? '(Current Source)' : ''}
-                    </option>
-                  ))}
+                  {regularAccounts.length > 0 && debtAccounts.length > 0 ? (
+                    <>
+                      <optgroup label="Regular Accounts">
+                        {regularAccounts.map(a => (
+                          <option key={a.id} value={a.id} disabled={a.id === formData.accountId}>
+                            {a.name} {a.id === formData.accountId ? '(Current Source)' : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                      <optgroup label="Debt Accounts">
+                        {debtAccounts.map(a => (
+                          <option key={a.id} value={a.id} disabled={a.id === formData.accountId}>
+                            {a.name} ({a.debtDirection === 'receivable' ? 'Receivable' : 'Payable'}) {a.id === formData.accountId ? '(Current Source)' : ''}
+                          </option>
+                        ))}
+                      </optgroup>
+                    </>
+                  ) : (
+                    accounts.map(a => (
+                      <option key={a.id} value={a.id} disabled={a.id === formData.accountId}>
+                        {a.name} {a.id === formData.accountId ? '(Current Source)' : ''}
+                      </option>
+                    ))
+                  )}
                 </Select>
               </label>
             </div>
@@ -1171,7 +1560,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 placeholder="0.00" 
                 type="text" 
                 value={formData.amount}
-                onChange={e => setFormData({ ...formData, amount: e.target.value })}
+                onChange={e => handleAmountChange(e.target.value)}
                 required
                 className={cn(
                   "text-2xl font-bold py-6",
@@ -1232,12 +1621,14 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 <Select 
                   icon={CreditCard}
                   value={formData.accountId}
-                  onChange={e => setFormData({ ...formData, accountId: e.target.value })}
+                  onChange={e => handleAccountChange(e.target.value)}
                   required
                 >
                   {accounts.length === 0 && <option value="">No Accounts Available</option>}
                   {accounts.map(a => (
-                    <option key={a.id} value={a.id}>{a.name}</option>
+                    <option key={a.id} value={a.id}>
+                      {a.name}{a.isShared ? ' (Shared)' : ''}
+                    </option>
                   ))}
                 </Select>
               </label>
@@ -1258,6 +1649,90 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 </Select>
               </label>
             </div>
+
+            {/* Shared Account Split for Subscription */}
+            {isSelectedAccountShared && (
+              <div className="p-4 bg-sky-500/5 border border-sky-500/15 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sky-600 dark:text-sky-400">
+                    <Users size={16} />
+                    <span className="text-xs font-bold uppercase tracking-wider">Shared Recurring Split</span>
+                  </div>
+                  <span className="text-[11px] font-semibold opacity-60">
+                    Account Total: {formatCurrency(parseMoney(formData.amount) || 0, settings.currency)}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {[
+                    { label: '50% (Half)', ratio: 0.5 },
+                    { label: '100% (Mine)', ratio: 1.0 },
+                    { label: 'Custom', ratio: 'custom' }
+                  ].map(opt => {
+                    const isSelected = opt.ratio === 'custom'
+                      ? (myShareRatio !== 0.5 && myShareRatio !== 1.0)
+                      : myShareRatio === opt.ratio;
+                    return (
+                      <button
+                        key={opt.label}
+                        type="button"
+                        onClick={() => {
+                          const parsedTotal = parseMoney(formData.amount) || 0;
+                          if (opt.ratio !== 'custom') {
+                            setMyShareRatio(opt.ratio as number);
+                            setMyShareAmount((parsedTotal * (opt.ratio as number)).toFixed(2));
+                          }
+                        }}
+                        className={cn(
+                          "px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer",
+                          isSelected
+                            ? "bg-sky-600 text-white"
+                            : "bg-sky-500/10 text-sky-700 dark:text-sky-300 hover:bg-sky-500/20"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 block mb-1">
+                      My Share (Monthly Expected)
+                    </span>
+                    <Input
+                      placeholder="0.00"
+                      value={myShareAmount}
+                      onChange={e => {
+                        setMyShareAmount(e.target.value);
+                        const parsedShare = parseMoney(e.target.value);
+                        const parsedTotal = parseMoney(formData.amount) || 0;
+                        if (parsedTotal > 0 && parsedShare >= 0) {
+                          setMyShareRatio(parsedShare / parsedTotal);
+                        }
+                      }}
+                      className="font-bold text-sm"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 block mb-1">
+                      Others' Share
+                    </span>
+                    <div className="h-10 px-3 flex items-center rounded-xl bg-black/5 dark:bg-white/5 font-semibold text-sm opacity-70">
+                      {formatCurrency(
+                        Math.max(0, (parseMoney(formData.amount) || 0) - (parseMoney(myShareAmount) || 0)),
+                        settings.currency
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-foreground/50 leading-relaxed">
+                  Only your share ({formatCurrency(parseMoney(myShareAmount) || 0, settings.currency)}) is counted in your expected monthly {subscriptionType === 'income' ? 'gains' : 'expenses'}.
+                </p>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="block">

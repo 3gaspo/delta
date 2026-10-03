@@ -2,9 +2,9 @@ import React, { useState, useMemo } from 'react';
 import { useData } from '../../providers/DataProvider';
 import { Account, AccountType, DebtDirection } from '../../types';
 import { Button, Input, Select } from '../ui/Base';
-import { Landmark, Archive, Wallet, EyeOff, AlertCircle, Trash2, Calculator } from 'lucide-react';
-import { isInitialBalanceTx } from '../../utils/financial';
-import { parseMoney, formatCurrency } from '../../lib/utils';
+import { Landmark, Archive, Wallet, EyeOff, AlertCircle, Trash2, Calculator, Users } from 'lucide-react';
+import { isInitialBalanceTx, getAccountBalance } from '../../utils/financial';
+import { parseMoney, formatCurrency, cn } from '../../lib/utils';
 
 interface AccountFormProps {
   onClose: () => void;
@@ -21,7 +21,9 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
     debtDirection: initialData?.debtDirection || ('payable' as DebtDirection),
     archived: initialData?.archived || false,
     hidden: initialData?.hidden || false,
-    initialBalance: initialData?.initialBalance !== undefined ? initialData.initialBalance.toString() : '0'
+    initialBalance: initialData?.initialBalance !== undefined ? initialData.initialBalance.toString() : '0',
+    isShared: initialData?.isShared || false,
+    defaultMyShareRatio: initialData?.defaultMyShareRatio ?? 0.5
   });
 
   const [loading, setLoading] = useState(false);
@@ -30,20 +32,7 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
 
   const txSum = useMemo(() => {
     if (!initialData) return 0;
-    return transactions
-      .filter(t => t.status !== 'hidden' && (t.accountId === initialData.id || t.transferAccountId === initialData.id))
-      .filter(t => !isInitialBalanceTx(t))
-      .reduce((acc, t) => {
-        if (t.type === 'income') {
-          return t.accountId === initialData.id ? acc + t.amount : acc;
-        } else if (t.type === 'expense') {
-          return t.accountId === initialData.id ? acc - t.amount : acc;
-        } else if (t.type === 'transfer') {
-          if (t.accountId === initialData.id) return acc - t.amount;
-          if (t.transferAccountId === initialData.id) return acc + t.amount;
-        }
-        return acc;
-      }, 0);
+    return getAccountBalance(initialData.id, transactions, { ...initialData, initialBalance: 0 });
   }, [initialData, transactions]);
 
   const parsedInitial = parseMoney(formData.initialBalance) || 0;
@@ -74,8 +63,12 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
         initialBalance: initialBalanceNum
       };
 
-      if (formData.type === 'debt') {
+      if (formData.type === 'regular') {
+        submission.isShared = formData.isShared;
+        submission.defaultMyShareRatio = formData.isShared ? formData.defaultMyShareRatio : 1.0;
+      } else if (formData.type === 'debt') {
         submission.debtDirection = formData.debtDirection;
+        submission.isShared = false;
       }
 
       if (initialData) {
@@ -248,6 +241,90 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
             </label>
           )}
         </div>
+
+        {formData.type === 'regular' && (
+          <div className="p-4 bg-black/5 dark:bg-white/5 rounded-2xl space-y-3 border border-black/5 dark:border-white/5">
+            <label className="flex items-center justify-between cursor-pointer">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
+                  <Users size={18} />
+                </div>
+                <div>
+                  <span className="text-sm font-bold block text-foreground">Shared Account</span>
+                  <span className="text-[10px] opacity-50 block">Split expenses with partner, roommate, or friends</span>
+                </div>
+              </div>
+              <input 
+                type="checkbox" 
+                checked={formData.isShared}
+                onChange={e => setFormData({ ...formData, isShared: e.target.checked })}
+                className="w-5 h-5 rounded-lg border-none bg-black/10 text-black focus:ring-0 cursor-pointer"
+              />
+            </label>
+
+            {formData.isShared && (
+              <div className="pt-3 border-t border-black/5 dark:border-white/5 space-y-2.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 block">
+                  Default Personal Share
+                </span>
+                <div className="flex items-center gap-2">
+                  {[
+                    { label: '50% (Half)', val: 0.5 },
+                    { label: '100% (Mine)', val: 1.0 },
+                    { label: 'Custom', val: 'custom' }
+                  ].map(opt => {
+                    const isSelected = opt.val === 'custom' 
+                      ? (formData.defaultMyShareRatio !== 0.5 && formData.defaultMyShareRatio !== 1.0)
+                      : formData.defaultMyShareRatio === opt.val;
+                    return (
+                      <button
+                        key={opt.label}
+                        type="button"
+                        onClick={() => {
+                          if (opt.val !== 'custom') {
+                            setFormData({ ...formData, defaultMyShareRatio: opt.val as number });
+                          } else {
+                            if (formData.defaultMyShareRatio === 0.5 || formData.defaultMyShareRatio === 1.0) {
+                              setFormData({ ...formData, defaultMyShareRatio: 0.6 });
+                            }
+                          }
+                        }}
+                        className={cn(
+                          "px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer",
+                          isSelected 
+                            ? "bg-foreground text-background" 
+                            : "bg-black/5 dark:bg-white/5 hover:bg-black/10 text-foreground/70"
+                        )}
+                      >
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                {(formData.defaultMyShareRatio !== 0.5 && formData.defaultMyShareRatio !== 1.0) && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value={Math.round(formData.defaultMyShareRatio * 100)}
+                      onChange={e => {
+                        const pct = Math.min(100, Math.max(0, parseFloat(e.target.value) || 0));
+                        setFormData({ ...formData, defaultMyShareRatio: pct / 100 });
+                      }}
+                      className="w-24 text-center font-bold"
+                    />
+                    <span className="text-xs font-semibold opacity-60">% My Share</span>
+                  </div>
+                )}
+                <p className="text-[10px] opacity-40 leading-relaxed">
+                  Only your share is counted towards your personal expenses and budget, while the true total is deducted from this account.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="space-y-2">
           <label className="flex items-center gap-3 p-4 bg-black/5 dark:bg-white/5 rounded-2xl cursor-pointer">

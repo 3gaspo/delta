@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Account } from '../../types';
 import { useData } from '../../providers/DataProvider';
 import { formatCurrency, cn } from '../../lib/utils';
-import { getAccountBalance } from '../../utils/financial';
-import { Landmark, TrendingDown, TrendingUp, EyeOff, Edit3, Trash2 } from 'lucide-react';
+import { getAccountBalance, computeAccountCashflowAlert } from '../../utils/financial';
+import { Landmark, TrendingDown, TrendingUp, EyeOff, Edit3, Trash2, Users, AlertTriangle } from 'lucide-react';
 
 interface AccountCardProps {
   account: Account;
@@ -14,11 +14,16 @@ interface AccountCardProps {
 }
 
 export function AccountCard({ account, onClick, onEdit, onDelete }: AccountCardProps) {
-  const { transactions, settings } = useData();
+  const { transactions, recurringTransactions, settings } = useData();
   const balance = getAccountBalance(account.id, transactions, account);
   
   const isDebt = account.type === 'debt';
   const isReceivable = account.debtDirection === 'receivable';
+
+  const cashflowAlert = useMemo(() => {
+    if (account.archived) return null;
+    return computeAccountCashflowAlert(account, transactions, recurringTransactions);
+  }, [account, transactions, recurringTransactions]);
 
   const handleEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -58,6 +63,24 @@ export function AccountCard({ account, onClick, onEdit, onDelete }: AccountCardP
             <h4 className="font-bold text-base text-foreground leading-tight truncate">
               {account.name}
             </h4>
+            {account.isShared && (
+              <span className="text-[9px] font-bold bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 px-2 py-0.5 rounded-full uppercase flex items-center gap-1 shrink-0">
+                <Users size={10} /> Shared
+              </span>
+            )}
+            {cashflowAlert && (cashflowAlert.isNegativeNow || cashflowAlert.willGoNegative) && (
+              <span 
+                className="text-[9px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full uppercase flex items-center gap-1 shrink-0"
+                title={cashflowAlert.isNegativeNow 
+                  ? 'Account is currently below 0' 
+                  : `Projected to drop below 0 on ${new Date(cashflowAlert.firstNegativeDate!).toLocaleDateString([], { month: 'short', day: 'numeric' })}`}
+              >
+                <AlertTriangle size={10} />
+                {cashflowAlert.isNegativeNow 
+                  ? 'Below 0' 
+                  : `Below 0 on ${new Date(cashflowAlert.firstNegativeDate!).toLocaleDateString([], { month: 'short', day: 'numeric' })}`}
+              </span>
+            )}
             {account.hidden && (
               <span className="text-[9px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-full uppercase flex items-center gap-1 shrink-0">
                 <EyeOff size={10} /> Hidden
@@ -70,7 +93,11 @@ export function AccountCard({ account, onClick, onEdit, onDelete }: AccountCardP
             )}
           </div>
           <p className="text-[10px] font-bold uppercase tracking-wider opacity-40">
-            {isDebt ? (isReceivable ? 'Receivable' : 'Payable') : 'Regular Account'}
+            {isDebt 
+              ? (isReceivable ? 'Receivable' : 'Payable') 
+              : (account.isShared 
+                  ? `Shared Account (${Math.round((account.defaultMyShareRatio ?? 0.5) * 100)}% My Share)` 
+                  : 'Regular Account')}
           </p>
         </div>
       </div>
@@ -79,10 +106,16 @@ export function AccountCard({ account, onClick, onEdit, onDelete }: AccountCardP
         <div>
           <p className={cn(
             "text-lg sm:text-xl font-bold tracking-tight",
-            isDebt && (isReceivable ? "text-emerald-500" : "text-red-500")
+            isDebt && (isReceivable ? "text-emerald-500" : "text-red-500"),
+            cashflowAlert?.isNegativeNow && "text-red-500"
           )}>
             {formatCurrency(balance, settings.currency)}
           </p>
+          {cashflowAlert && (cashflowAlert.isNegativeNow || cashflowAlert.willGoNegative) && (
+            <p className="text-[10px] font-bold text-red-500/90 flex items-center justify-end gap-1 mt-0.5">
+              <span>Min: {formatCurrency(cashflowAlert.lowestBalance, settings.currency)}</span>
+            </p>
+          )}
         </div>
 
         <div className="flex items-center gap-1 shrink-0">

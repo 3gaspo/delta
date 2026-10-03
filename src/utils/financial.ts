@@ -1,5 +1,35 @@
 import { Transaction, Account, Category, Tag, RecurringTransaction } from '../types';
 
+/**
+ * Returns the user's personal share of a transaction.
+ * On shared accounts:
+ * - If myShareAmount is explicitly set, returns that.
+ * - If myShareRatio is set, returns Math.round(amount * myShareRatio * 100) / 100.
+ * Otherwise returns the full transaction amount.
+ */
+export function getMyTransactionAmount(t: Transaction): number {
+  if (typeof t.myShareAmount === 'number' && !isNaN(t.myShareAmount)) {
+    return t.myShareAmount;
+  }
+  if (typeof t.myShareRatio === 'number' && !isNaN(t.myShareRatio)) {
+    return Math.round(t.amount * t.myShareRatio * 100) / 100;
+  }
+  return t.amount;
+}
+
+/**
+ * Returns the user's personal share of a recurring rule amount.
+ */
+export function getMyRecurringAmount(r: RecurringTransaction): number {
+  if (typeof r.myShareAmount === 'number' && !isNaN(r.myShareAmount)) {
+    return r.myShareAmount;
+  }
+  if (typeof r.myShareRatio === 'number' && !isNaN(r.myShareRatio)) {
+    return Math.round(r.amount * r.myShareRatio * 100) / 100;
+  }
+  return r.amount;
+}
+
 export function isInitialBalanceTx(t: Transaction): boolean {
   return Boolean(
     t.isInitialBalance ||
@@ -14,29 +44,81 @@ export function getAccountBalance(
   accountOrInitialBalance?: Account | number | Account[]
 ): number {
   let initialOffset = 0;
+  let targetAccount: Account | undefined;
+
   if (typeof accountOrInitialBalance === 'number') {
     initialOffset = accountOrInitialBalance;
   } else if (accountOrInitialBalance && typeof accountOrInitialBalance === 'object') {
     if ('initialBalance' in accountOrInitialBalance) {
-      initialOffset = (accountOrInitialBalance as Account).initialBalance || 0;
+      targetAccount = accountOrInitialBalance as Account;
+      initialOffset = targetAccount.initialBalance || 0;
     } else if (Array.isArray(accountOrInitialBalance)) {
-      const found = accountOrInitialBalance.find(a => a.id === accountId);
-      initialOffset = found?.initialBalance || 0;
+      targetAccount = accountOrInitialBalance.find(a => a.id === accountId);
+      initialOffset = targetAccount?.initialBalance || 0;
     }
   }
 
+  const isDebt = targetAccount?.type === 'debt';
+  const isReceivable = targetAccount?.debtDirection === 'receivable';
+
   const txSum = transactions
-    .filter(t => t.status !== 'hidden' && (t.accountId === accountId || t.transferAccountId === accountId))
+    .filter(t => t.status !== 'hidden' && (
+      t.accountId === accountId || 
+      t.transferAccountId === accountId || 
+      t.debtAccountId === accountId
+    ))
     .filter(t => !isInitialBalanceTx(t))
     .reduce((acc, t) => {
-      if (t.type === 'income') {
-        return t.accountId === accountId ? acc + t.amount : acc;
-      } else if (t.type === 'expense') {
-        return t.accountId === accountId ? acc - t.amount : acc;
-      } else if (t.type === 'transfer') {
-        if (t.accountId === accountId) return acc - t.amount;
-        if (t.transferAccountId === accountId) return acc + t.amount;
+      // 1. Transaction is linked to this debt account via debtAccountId
+      if (t.debtAccountId === accountId) {
+        if (isReceivable) {
+          // Expense paid for friend -> friend owes me more (+amount)
+          // Income received from friend -> friend repaid part of debt (-amount)
+          return t.type === 'expense' ? acc + t.amount : t.type === 'income' ? acc - t.amount : acc;
+        } else {
+          // Payable (I owe them):
+          // Income received from them (borrowed money) -> I owe more (+amount)
+          // Expense paid to them (repayment) -> I owe less (-amount)
+          return t.type === 'income' ? acc + t.amount : t.type === 'expense' ? acc - t.amount : acc;
+        }
       }
+
+      // 2. This account is the primary accountId
+      if (t.accountId === accountId) {
+        if (isDebt) {
+          if (isReceivable) {
+            if (t.type === 'expense') return acc + t.amount;
+            if (t.type === 'income') return acc - t.amount;
+            if (t.type === 'transfer') return acc - t.amount;
+          } else {
+            if (t.type === 'income') return acc + t.amount;
+            if (t.type === 'expense') return acc - t.amount;
+            if (t.type === 'transfer') return acc - t.amount;
+          }
+        } else {
+          // Regular account
+          if (t.type === 'income') return acc + t.amount;
+          if (t.type === 'expense') return acc - t.amount;
+          if (t.type === 'transfer') return acc - t.amount;
+        }
+      }
+
+      // 3. Transfer where this account is transferAccountId (destination)
+      if (t.transferAccountId === accountId) {
+        if (isDebt) {
+          if (isReceivable) {
+            // Transfer into receivable -> loaning more money -> debt increases (+amount)
+            return acc + t.amount;
+          } else {
+            // Transfer into payable -> repayment of debt -> debt reduces (-amount)
+            return acc - t.amount;
+          }
+        } else {
+          // Regular account receiving transfer
+          return acc + t.amount;
+        }
+      }
+
       return acc;
     }, 0);
 
@@ -117,22 +199,23 @@ export function getStatsAggregation(
 
   const nonInitial = filtered.filter(t => !isInitialBalanceTx(t));
 
-  const income = nonInitial.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-  const expenses = nonInitial.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+  const income = nonInitial.filter(t => t.type === 'income').reduce((sum, t) => sum + getMyTransactionAmount(t), 0);
+  const expenses = nonInitial.filter(t => t.type === 'expense').reduce((sum, t) => sum + getMyTransactionAmount(t), 0);
   const netFlow = income - expenses;
 
   const byCategory = nonInitial
     .filter(t => t.type === 'expense')
     .reduce((acc, t) => {
-      acc[t.categoryId] = (acc[t.categoryId] || 0) + t.amount;
+      acc[t.categoryId] = (acc[t.categoryId] || 0) + getMyTransactionAmount(t);
       return acc;
     }, {} as Record<string, number>);
 
   const byTag = filtered
     .filter(t => t.type === 'expense')
     .reduce((acc, t) => {
+      const myAmt = getMyTransactionAmount(t);
       t.tagIds.forEach(tagId => {
-        acc[tagId] = (acc[tagId] || 0) + t.amount;
+        acc[tagId] = (acc[tagId] || 0) + myAmt;
       });
       return acc;
     }, {} as Record<string, number>);
@@ -158,7 +241,7 @@ export function generateCSV(
   const tagMap = new Map(tags.map(t => [t.id, t]));
 
   const headers = [
-    'transaction_id', 'date', 'created_at', 'updated_at', 'type', 'status', 'amount', 'currency', 
+    'transaction_id', 'date', 'created_at', 'updated_at', 'type', 'status', 'amount', 'my_share_amount', 'currency', 
     'description', 'account_id', 'account_name', 'transfer_account_id', 'transfer_account_name', 
     'category_id', 'category_label', 'tag_ids', 'tag_labels', 'included_in_balances', 'included_in_stats'
   ];
@@ -186,6 +269,7 @@ export function generateCSV(
       t.type,
       t.status,
       t.amount,
+      t.myShareAmount !== undefined ? t.myShareAmount : t.amount,
       currency,
       t.description || '',
       t.accountId,
@@ -235,14 +319,14 @@ export function computeExpectedMonthlyFinancials(
   // 1. Expected Gains from recurring income
   let expectedGains = activeRecurring
     .filter(r => r.type === 'income')
-    .reduce((sum, r) => sum + getMonthlyEquivalent(r.amount, r.periodicityDays), 0);
+    .reduce((sum, r) => sum + getMonthlyEquivalent(getMyRecurringAmount(r), r.periodicityDays), 0);
 
   // Add income categories if they have a budget limit higher than recurring income assigned
   const incomeCategories = (categories || []).filter(c => c.type === 'income' && (c.budgetLimit || 0) > 0);
   incomeCategories.forEach(cat => {
     const recurringInCat = activeRecurring
       .filter(r => r.type === 'income' && r.categoryId === cat.id)
-      .reduce((sum, r) => sum + getMonthlyEquivalent(r.amount, r.periodicityDays), 0);
+      .reduce((sum, r) => sum + getMonthlyEquivalent(getMyRecurringAmount(r), r.periodicityDays), 0);
     const catBudget = cat.budgetLimit || 0;
     if (catBudget > recurringInCat) {
       expectedGains += (catBudget - recurringInCat);
@@ -257,7 +341,7 @@ export function computeExpectedMonthlyFinancials(
   activeRecurring
     .filter(r => r.type === 'expense')
     .forEach(r => {
-      const monthly = getMonthlyEquivalent(r.amount, r.periodicityDays);
+      const monthly = getMonthlyEquivalent(getMyRecurringAmount(r), r.periodicityDays);
       totalRecurringExpenses += monthly;
       if (r.categoryId) {
         recurringExpensesByCat.set(r.categoryId, (recurringExpensesByCat.get(r.categoryId) || 0) + monthly);
@@ -375,13 +459,14 @@ export function computeFullPeriodAverages(
     fullMonths.forEach(fm => {
       const monthTxs = validTxs.filter(t => t.date >= fm.start && t.date <= fm.end);
       monthTxs.forEach(t => {
+        const myAmt = getMyTransactionAmount(t);
         if (t.type === 'expense' || t.type === 'subscription') {
-          totalExpenses += t.amount;
+          totalExpenses += myAmt;
           if (t.categoryId) {
-            catExpensesSum[t.categoryId] = (catExpensesSum[t.categoryId] || 0) + t.amount;
+            catExpensesSum[t.categoryId] = (catExpensesSum[t.categoryId] || 0) + myAmt;
           }
         } else if (t.type === 'income') {
-          totalIncome += t.amount;
+          totalIncome += myAmt;
         }
       });
     });
@@ -417,10 +502,11 @@ export function computeFullPeriodAverages(
     fullYears.forEach(fy => {
       const yearTxs = validTxs.filter(t => t.date >= fy.start && t.date <= fy.end);
       yearTxs.forEach(t => {
+        const myAmt = getMyTransactionAmount(t);
         if (t.type === 'expense' || t.type === 'subscription') {
-          totalExpenses += t.amount;
+          totalExpenses += myAmt;
         } else if (t.type === 'income') {
-          totalIncome += t.amount;
+          totalIncome += myAmt;
         }
       });
     });
@@ -460,10 +546,11 @@ export function computeFullPeriodAverages(
     fullWeeks.forEach(fw => {
       const weekTxs = validTxs.filter(t => t.date >= fw.start && t.date <= fw.end);
       weekTxs.forEach(t => {
+        const myAmt = getMyTransactionAmount(t);
         if (t.type === 'expense' || t.type === 'subscription') {
-          totalExpenses += t.amount;
+          totalExpenses += myAmt;
         } else if (t.type === 'income') {
-          totalIncome += t.amount;
+          totalIncome += myAmt;
         }
       });
     });
@@ -488,3 +575,6 @@ export function computeFullPeriodAverages(
     categoryMonthlyAvg
   };
 }
+
+export * from './cashflow';
+

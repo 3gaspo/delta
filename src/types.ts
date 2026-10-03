@@ -12,6 +12,8 @@ export interface Account {
   archived?: boolean;
   hidden?: boolean;
   order?: number;
+  isShared?: boolean;
+  defaultMyShareRatio?: number;
 }
 
 export type TransactionType = 'expense' | 'income' | 'transfer' | 'subscription';
@@ -29,6 +31,7 @@ export interface Transaction {
   name: string;
   description?: string;
   transferAccountId?: string;
+  debtAccountId?: string;
   periodicityDays?: number;
   lastGeneratedDate?: number;
   recurringId?: string;
@@ -38,6 +41,8 @@ export interface Transaction {
   isCorrection?: boolean;
   isInitialBalance?: boolean;
   groupId?: string;
+  myShareAmount?: number;
+  myShareRatio?: number;
 }
 
 export interface RecurringTransaction {
@@ -48,6 +53,7 @@ export interface RecurringTransaction {
   periodicityDays: number;
   accountId: string;
   transferAccountId?: string;
+  debtAccountId?: string;
   categoryId?: string;
   tagIds: string[];
   type: 'expense' | 'income' | 'transfer';
@@ -57,6 +63,8 @@ export interface RecurringTransaction {
   active?: boolean;
   createdAt: number;
   updatedAt: number;
+  myShareAmount?: number;
+  myShareRatio?: number;
 }
 
 export interface Category {

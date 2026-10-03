@@ -9,7 +9,7 @@ import {
 } from 'recharts';
 import { formatCurrency, cn } from '../lib/utils';
 import { TransactionType } from '../types';
-import { isInitialBalanceTx, getAccountBalance, computeFullPeriodAverages } from '../utils/financial';
+import { isInitialBalanceTx, getAccountBalance, computeFullPeriodAverages, getMyTransactionAmount } from '../utils/financial';
 import { 
   startOfMonth, endOfMonth, format, eachMonthOfInterval, 
   startOfYear, startOfWeek, endOfWeek,
@@ -178,8 +178,8 @@ export default function Stats() {
         
         if (flowTypeFilter !== 'all' && t.type !== flowTypeFilter) return;
 
-        if (isExpense) res.expenses += t.amount;
-        if (isIncome) res.income += t.amount;
+        if (isExpense) res.expenses += getMyTransactionAmount(t);
+        if (isIncome) res.income += getMyTransactionAmount(t);
       });
 
       return res;
@@ -202,7 +202,7 @@ export default function Stats() {
     categories.forEach((cat, idx) => {
       const total = catFiltered
         .filter(t => t.categoryId === cat.id && (t.type === 'expense' || t.type === 'subscription'))
-        .reduce((sum, t) => sum + t.amount, 0);
+        .reduce((sum, t) => sum + getMyTransactionAmount(t), 0);
       
       const existingColor = cat.color || CHART_COLORS[idx % CHART_COLORS.length];
       const catAvg = periodAverages.categoryMonthlyAvg[cat.id] ?? null;
