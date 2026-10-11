@@ -7,6 +7,10 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const browser = await chromium.launch({ headless: true, channel: 'chrome' });
 try {
   const page = await browser.newPage({ viewport: { width: 430, height: 932 } });
+  const choose = async (scope, label, option) => {
+    await scope.getByRole('button', { name: label, exact: true }).click();
+    await scope.getByRole('option', { name: option, exact: true }).click();
+  };
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => {
@@ -28,10 +32,10 @@ try {
       for (const [key, value] of Object.entries(state)) localStorage.setItem(`delta_${uid}_${key}`, JSON.stringify(value));
       localStorage.setItem('smoke-seeded', 'true');
     }
-    const payload = { version: 1, bank: 'boursobank', accountRef: 'a'.repeat(64), currency: 'EUR', warnings: [], transactions: [
+    const payload = { version: 2, bank: 'boursobank', accountRef: 'a'.repeat(64), currency: 'EUR', warnings: [], transactions: [
       { sourceId: 'fee', date: '2026-10-06', amountCents: -690, name: 'Bank fee', description: 'BANK FEE', bankCategory: 'Fees' },
       { sourceId: 'transfer', date: '2026-10-07', amountCents: 100000, name: 'Incoming transfer', description: 'TRANSFER', bankCategory: 'Transfers' },
-      { sourceId: 'lunch', date: '2026-10-08', amountCents: -1200, name: 'Lunch', description: 'RESTAURANT', bankCategory: 'Food' },
+      { sourceId: 'lunch', date: '2026-10-08', amountCents: -1200, name: 'Lunch', description: 'RESTAURANT', bankCategory: 'Food', status: 'pending' },
     ] };
     window.addEventListener('message', event => {
       if (event.data?.type === 'delta-bank-import:request') {
@@ -42,17 +46,26 @@ try {
     });
   });
   await page.goto('http://localhost:3000/import#bank-import=12345678-1234-1234-1234-123456789abc');
-  await page.getByText('BoursoBank · 3 loaded transactions').waitFor();
-  await page.getByLabel('Delta account for this bank account').selectOption('a');
+  await page.getByText('3 loaded transactions', { exact: true }).waitFor();
   await page.locator('fieldset').nth(2).waitFor();
+  const lunchSelection = page.getByRole('checkbox', { name: 'Select Lunch', exact: true });
+  assert.equal(await lunchSelection.isEnabled(), true);
+  await lunchSelection.uncheck();
+  await choose(page, 'Delta account for this bank account', 'Bank A');
+  assert.equal(await lunchSelection.isChecked(), false);
+  await lunchSelection.focus();
+  await page.keyboard.press('Space');
+  assert.equal(await lunchSelection.isChecked(), true);
+  assert.equal(await page.locator('fieldset').nth(2).getByLabel('Notes', { exact: true }).inputValue(), '');
+  assert.equal(await page.locator('fieldset').nth(2).getByRole('button', { name: 'Status', exact: true }).innerText(), 'Pending');
   const validate = page.getByRole('button', { name: 'Validate 2 transactions', exact: true });
   await validate.waitFor();
   assert.equal(await page.locator('fieldset').nth(0).getByRole('checkbox').first().isChecked(), false);
-  await page.locator('fieldset').nth(1).locator('select').first().selectOption('transfer');
+  await choose(page.locator('fieldset').nth(1), 'Type', 'Transfer between my accounts');
   await validate.click();
   await page.getByRole('alert').filter({ hasText: 'choose the other transfer account' }).waitFor();
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('delta_dev-user-001_transactions')).length), 1);
-  await page.locator('fieldset').nth(1).locator('select').nth(1).selectOption('b');
+  await choose(page.locator('fieldset').nth(1), 'From account', 'Bank B');
   await page.locator('fieldset').nth(2).getByLabel('My share (%)').fill('25');
   await page.locator('fieldset').nth(2).getByLabel('Notes').fill('Business lunch');
   await page.locator('fieldset').nth(2).getByText('Tags (0)').click();
@@ -67,13 +80,15 @@ try {
   assert.equal(transfer.type, 'transfer');
   assert.equal(transfer.accountId, 'b');
   assert.equal(transfer.transferAccountId, 'a');
+  assert.equal(transfer.description, '');
   const lunch = saved.find(t => t.name === 'Lunch');
   assert.equal(lunch.myShareAmount, 3);
   assert.equal(lunch.description, 'Business lunch');
   assert.deepEqual(lunch.tagIds, ['tag']);
+  assert.equal(lunch.status, 'pending');
   await page.reload();
-  await page.getByText('BoursoBank · 3 loaded transactions').waitFor();
-  await page.getByLabel('Delta account for this bank account').selectOption('a');
+  await page.getByText('3 loaded transactions', { exact: true }).waitFor();
+  await choose(page, 'Delta account for this bank account', 'Bank A');
   const empty = page.getByRole('button', { name: 'Validate 0 transactions', exact: true });
   await empty.waitFor();
   assert.equal(await empty.isDisabled(), true);
@@ -92,7 +107,7 @@ try {
   const cdp = await page.context().newCDPSession(page);
   const { frameTree } = await cdp.send('Page.getFrameTree');
   const { executionContextId } = await cdp.send('Page.createIsolatedWorld', { frameId: frameTree.frame.id, worldName: 'delta-userscript-test' });
-  const isolatedPayload = { version: 1, bank: 'boursobank', accountRef: 'a'.repeat(64), currency: 'EUR', warnings: [], transactions: [
+  const isolatedPayload = { version: 2, bank: 'boursobank', accountRef: 'a'.repeat(64), currency: 'EUR', warnings: [], transactions: [
     { sourceId: 'isolated', date: '2026-10-09', amountCents: -505, name: 'Isolated-world transaction', description: 'SYNTHETIC', bankCategory: 'Food' },
   ] };
   const injected = await cdp.send('Runtime.evaluate', { contextId: executionContextId, expression: `
@@ -104,8 +119,8 @@ try {
     ${readFileSync('public/delta-bank-import.user.js', 'utf8')}
   ` });
   assert.equal(injected.exceptionDetails, undefined);
-  await page.getByText('BoursoBank · 1 loaded transactions').waitFor();
-  await page.getByLabel('Delta account for this bank account').selectOption('a');
+  await page.getByText('1 loaded transactions', { exact: true }).waitFor();
+  await choose(page, 'Delta account for this bank account', 'Bank A');
   await page.getByRole('button', { name: 'Validate 1 transactions', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Clear draft', exact: true }).click();
   const remaining = await cdp.send('Runtime.evaluate', { contextId: executionContextId, expression: 'entries.size', returnByValue: true });

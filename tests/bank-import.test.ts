@@ -15,10 +15,11 @@ const cicRow = (id: number, debit: string, credit: string) => `<tr id="dynamic.$
 const extract = (html: string, bank = 'boursobank') => extractBankTransactions(parseHTML(html).document, bank, bank === 'cic' ? 'https://www.cic.fr/fr/banque/mouvements.html?webid=example' : 'https://clients.boursobank.com/compte/cav/example-account/');
 const payload = (): BankPayload => ({ version: 1, bank: 'cic', accountRef: 'a'.repeat(64), currency: 'EUR', warnings: [], transactions: [{ date: '2026-10-06', amountCents: -690, name: 'Example', description: 'EXAMPLE', bankCategory: 'Fees' }] });
 
-test('Bourso: signed French amounts, date headings, stable IDs, pending excluded', () => {
+test('Bourso: signed French amounts, date headings, stable IDs, pending included', () => {
   const result = extract(boursoList(boursoRow('a', '−&nbsp;2,40&nbsp;€') + boursoRow('b', '+ 1 234,56 €') + boursoRow('pending', '−13,00 €', true)));
-  assert.deepEqual(result.transactions.map(t => [t.sourceId, t.date, t.amountCents]), [['a', '2026-10-09', -240], ['b', '2026-10-09', 123456]]);
-  assert.match(result.warnings.join(' '), /1 pending/);
+  assert.deepEqual(result.transactions.map(t => [t.sourceId, t.date, t.amountCents, t.status]), [['a', '2026-10-09', -240, 'normal'], ['b', '2026-10-09', 123456, 'normal'], ['pending', '2026-10-09', -1300, 'pending']]);
+  assert.equal(result.warnings.length, 0);
+  assert.equal(extract(boursoList(boursoRow('only-pending', '−13,00 €', true))).transactions.length, 1);
 });
 test('Bourso: duplicate DOM rows excluded, malformed date or money never guessed', () => {
   const result = extract(boursoList(boursoRow('a', '−2,40 €') + boursoRow('a', '−2,40 €') + boursoRow('b', 'USD 1.25')));
@@ -45,8 +46,9 @@ test('CIC: positional IDs do not become identity; unreadable rows report warning
 });
 test('payload boundary rejects invalid dates, amounts, currencies, IDs and oversized input', () => {
   assert.equal(validateBankPayload(payload()).transactions.length, 1);
-  for (const patch of [{ currency: 'USD' }, { accountRef: 'raw-bank-id' }, { version: 2 }, { transactions: [] }]) assert.throws(() => validateBankPayload({ ...payload(), ...patch }));
-  for (const patch of [{ date: '2026-02-30' }, { amountCents: 1.2 }, { amountCents: 0 }, { name: '' }, { description: 'x'.repeat(2001) }]) assert.throws(() => validateBankPayload({ ...payload(), transactions: [{ ...payload().transactions[0], ...patch }] }));
+  for (const patch of [{ currency: 'USD' }, { accountRef: 'raw-bank-id' }, { version: 3 }, { transactions: [] }]) assert.throws(() => validateBankPayload({ ...payload(), ...patch }));
+  assert.equal(validateBankPayload({ ...payload(), version: 2, transactions: [{ ...payload().transactions[0], status: 'pending' }] }).transactions[0].status, 'pending');
+  for (const patch of [{ status: 'unknown' }, { date: '2026-02-30' }, { amountCents: 1.2 }, { amountCents: 0 }, { name: '' }, { description: 'x'.repeat(2001) }]) assert.throws(() => validateBankPayload({ ...payload(), transactions: [{ ...payload().transactions[0], ...patch }] }));
   assert.throws(() => validateBankPayload({ ...payload(), bank: 'boursobank' }));
   assert.throws(() => validateBankPayload({ ...payload(), transactions: Array(1001).fill(payload().transactions[0]) }));
 });
@@ -70,6 +72,47 @@ test('manual entries and either side of transfers are possible duplicates on the
   const transfer = { ...tx, type: 'transfer' as const, transferAccountId: 'b' };
   assert.equal(possibleBankDuplicates(payload().transactions[0], 'a', [transfer]).length, 1);
   assert.equal(possibleBankDuplicates({ ...payload().transactions[0], amountCents: 690 }, 'b', [transfer]).length, 1);
+  const pending = { ...tx, status: 'pending' as const, date: localBookingDate('2026-10-03') };
+  assert.equal(possibleBankDuplicates(payload().transactions[0], 'a', [pending]).length, 1);
+  assert.equal(possibleBankDuplicates(payload().transactions[0], 'a', [{ ...pending, date: localBookingDate('2026-09-01') }]).length, 0);
+});
+
+test('bank prompt never auto-opens, can be dismissed/reopened, and includes pending on click', async () => {
+  const { document } = parseHTML(`<html><body>${boursoList(boursoRow('pending', '−13,00 €', true))}</body></html>`);
+  let shadow: any;
+  const createElement = document.createElement.bind(document);
+  document.createElement = ((tag: string) => {
+    const element = createElement(tag);
+    const attach = element.attachShadow.bind(element);
+    element.attachShadow = options => { shadow = attach(options); return shadow; };
+    return element;
+  }) as typeof document.createElement;
+  const store = new Map<string, any>([['delta-auto-open', true]]);
+  const menus = new Map<string, () => void>();
+  const tabs: string[] = [];
+  runInNewContext(readFileSync('public/delta-bank-import.user.js', 'utf8'), {
+    document, URL, URLSearchParams, TextEncoder, crypto, MutationObserver: document.defaultView.MutationObserver,
+    location: { origin: 'https://clients.boursobank.com', hostname: 'clients.boursobank.com', href: 'https://clients.boursobank.com/compte/cav/example-account/' },
+    setTimeout: () => 1,
+    GM_listValues: () => [...store.keys()], GM_getValue: (k: string, fallback: any) => store.get(k) ?? fallback,
+    GM_setValue: (k: string, value: any) => store.set(k, value), GM_deleteValue: (k: string) => store.delete(k),
+    GM_openInTab: (url: string) => tabs.push(url), GM_registerMenuCommand: (label: string, fn: () => void) => menus.set(label, fn),
+  });
+  assert.equal(tabs.length, 0);
+  assert.equal(store.size, 1);
+  const host = shadow.host;
+  assert.equal(host.isConnected, true);
+  shadow.querySelector('.close').click();
+  assert.equal(host.isConnected, false);
+  menus.get('Delta: show import prompt')!();
+  assert.equal(host.isConnected, true);
+  shadow.querySelector('.import').click();
+  for (let i = 0; i < 50 && !tabs.length; i++) await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(tabs.length, 1);
+  const draft = [...store.entries()].find(([key]) => key.startsWith('delta-import:'))![1];
+  assert.equal(draft.payload.transactions[0].status, 'pending');
+  assert.equal(draft.payload.version, 2);
+  assert.match(draft.payload.accountRef, /^[a-f0-9]{64}$/);
 });
 test('userscript bridge accepts only same-window same-origin requests and clears expiring drafts', () => {
   const token = '12345678-1234-1234-1234-123456789abc';

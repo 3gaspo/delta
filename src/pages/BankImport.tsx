@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useData } from '../providers/DataProvider';
 import { PageContainer } from '../components/layout/PageContainer';
-import { Button, Input } from '../components/ui/Base';
+import { Button, Card, Input, Select } from '../components/ui/Base';
+import { ArrowLeft, CreditCard, Layers, AlignLeft, ArrowRightLeft, Clock3 } from 'lucide-react';
+import { cn, formatCurrency } from '../lib/utils';
 import { BankPayload, BankImportSource, identifyBankRows, localBookingDate, possibleBankDuplicates, validateBankPayload } from '../lib/bankImport';
 
 interface ReviewRow {
@@ -10,6 +12,7 @@ interface ReviewRow {
   name: string;
   categoryId: string;
   description: string;
+  status: 'normal' | 'pending';
   tagIds: string[];
   transfer: boolean;
   otherAccountId: string;
@@ -18,7 +21,7 @@ interface ReviewRow {
   saved?: string;
   error?: string;
 }
-const selectClass = 'w-full bg-black/5 dark:bg-white/10 rounded-xl p-3 text-foreground';
+const labelClass = 'block text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2';
 
 export default function BankImport() {
   const { accounts, categories, tags, transactions, settings, loading, bankImportReady, bankImportError, importBankTransaction } = useData();
@@ -46,7 +49,7 @@ export default function BankImport() {
       if (reply?.token !== token) return;
       if (reply.type === 'delta-bank-import:expired' && !received) {
         received = true;
-        setError('This draft has expired. Return to your bank and click “Review loaded transactions in Delta”.');
+        setError('This draft has expired. Return to your bank and click “Import transactions”.');
         clearInterval(interval);
         clearTimeout(timeout);
         return;
@@ -60,7 +63,7 @@ export default function BankImport() {
         const sources = await identifyBankRows(next);
         if (disposed) return;
         setPayload(next);
-        setRows(next.transactions.map((row, i) => ({ source: sources[i], name: row.name, description: row.description,
+        setRows(next.transactions.map((row, i) => ({ source: sources[i], name: row.name, description: '', status: row.status || 'normal',
           categoryId: '', tagIds: [], transfer: false, otherAccountId: '' })));
         setError('');
       } catch (e) { if (!disposed) setError(e instanceof Error ? e.message : 'Invalid import draft.'); }
@@ -83,7 +86,7 @@ export default function BankImport() {
     interval = setInterval(request, 700);
     timeout = setTimeout(() => {
       clearInterval(interval);
-      if (!received && !disposed) setError('No userscript response. Update the Delta userscript to version 1.0.1 or later, allow it on this site, then reload this page.');
+      if (!received && !disposed) setError('No userscript response. Update the Delta userscript to version 1.1.0 or later, allow it on this site, then reload this page.');
     }, 10000);
     request();
     return () => {
@@ -95,7 +98,10 @@ export default function BankImport() {
     };
   }, [token, discarded]);
 
-  const patch = (index: number, changes: Partial<ReviewRow>) => setRows(old => old.map((row, i) => i === index ? { ...row, ...changes } : row));
+  const patch = (index: number, changes: Partial<ReviewRow>) => {
+    setError('');
+    setRows(old => old.map((row, i) => i === index ? { ...row, ...changes } : row));
+  };
   const defaultCategory = (index: number) => {
     const type = payload!.transactions[index].amountCents > 0 ? 'income' : 'expense';
     const compatible = categories.filter(c => !c.type || c.type === 'both' || c.type === type);
@@ -111,7 +117,7 @@ export default function BankImport() {
   };
   const isSelected = (index: number) => {
     const info = duplicate(index);
-    return Boolean(account) && !info.exact && (rows[index].selected ?? (!info.matches.length && !info.repeated));
+    return !info.exact && (rows[index].selected ?? (!info.matches.length && !info.repeated));
   };
   const selectedCount = rows.filter((_, i) => isSelected(i)).length;
 
@@ -148,7 +154,7 @@ export default function BankImport() {
             transferAccountId: row.transfer ? (incoming ? accountId : row.otherAccountId) : undefined,
             type: row.transfer ? 'transfer' : incoming ? 'income' : 'expense',
             categoryId: row.transfer ? '' : row.categoryId || defaultCategory(i),
-            tagIds: row.tagIds.filter(id => tags.some(t => t.id === id)), status: 'normal',
+            tagIds: row.tagIds.filter(id => tags.some(t => t.id === id)), status: row.status,
             description: row.description, bankImport: row.source,
             ...(account.isShared && !row.transfer ? { myShareRatio: ratio, myShareAmount: Math.round(amount * ratio * 100) / 100 } : {}),
           });
@@ -177,81 +183,76 @@ export default function BankImport() {
     setMessage('Draft cleared. Saved transactions remain in Delta.');
   }
 
-  return <PageContainer title="Bank import">
+  return <PageContainer title="Bank import" actions={<Link to="/home" aria-label="Back to transactions" className="p-3 rounded-2xl bg-black/5 dark:bg-white/5"><ArrowLeft size={20} /></Link>}>
     <div className="space-y-5">
-      <Link to="/home" className="text-sm underline">Back to transactions</Link>
       {error && <p role="alert" className="rounded-2xl bg-red-500/10 p-4 text-sm">{error}</p>}
       {bankImportError && <p role="alert" className="rounded-2xl bg-red-500/10 p-4 text-sm">{bankImportError}</p>}
       {message && <p role="status" className="rounded-2xl bg-emerald-500/10 p-4 text-sm">{message}</p>}
-      {!payload && <div className="rounded-2xl bg-black/5 dark:bg-white/5 p-5 space-y-3">
-        <h2 className="font-bold">Connect your bank pages</h2>
-        <p className="text-sm">Install the Delta script in Tampermonkey, then open your CIC or BoursoBank transaction list. A draft opens here automatically. Nothing is saved until you validate.</p>
-        <a className="inline-block underline font-medium" href="/delta-bank-import.user.js">Install Delta userscript</a>
-        <p className="text-sm opacity-70">Only loaded, booked EUR transactions are collected. Use your bank’s “Plus d’opérations” or “Mouvements précédents” to load older entries, then click the Delta button again.</p>
+      {!payload && <Card label="Bank connection" className="p-5 space-y-3">
+        <a className="inline-block font-medium text-sm underline" href="/delta-bank-import.user.js">Install / update Delta userscript</a>
         {token && !error && !discarded && <p role="status">Waiting for your bank draft…</p>}
-      </div>}
+      </Card>}
       {payload && <>
-        <div className="rounded-2xl bg-black/5 dark:bg-white/5 p-5 space-y-3">
-          <h2 className="font-bold">{payload.bank === 'cic' ? 'CIC' : 'BoursoBank'} · {rows.length} loaded transactions</h2>
-          <p className="text-sm opacity-70">Booking dates · EUR · review before saving. Bank categories are shown as hints.</p>
-          {payload.warnings.map((warning, i) => <p key={i} className="text-sm">{warning}</p>)}
-          {payload.bank === 'cic' && <p className="text-sm">Identical CIC payments may match differently when you load a partial date range. Matching rows are left unchecked for review.</p>}
-          <label className="block text-sm font-medium">Delta account for this bank account
-            <select className={`${selectClass} mt-2`} value={accountId} disabled={busy || rows.some(r => r.saved)} onChange={e => {
+        <Card label={payload.bank === 'cic' ? 'CIC' : 'BoursoBank'} className="p-4 space-y-4">
+          <h2 className="font-bold text-sm tracking-tight">{rows.length} loaded transactions</h2>
+          <div>
+            <span className={labelClass}>Account</span>
+            <Select aria-label="Delta account for this bank account" icon={CreditCard} value={accountId} disabled={busy || rows.some(r => r.saved)} onChange={e => {
               setAccountId(e.target.value);
-              setRows(old => old.map(row => ({ ...row, selected: undefined, share: undefined, otherAccountId: '' })));
+              setRows(old => old.map(row => ({ ...row, share: undefined, otherAccountId: '' })));
             }}>
               <option value="">Choose an account</option>
               {activeAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-            </select>
-          </label>
+            </Select>
+          </div>
           {!activeAccounts.length && <Link to="/accounts" className="underline text-sm">Create an account first</Link>}
           {settings.currency !== 'EUR' && <p role="alert" className="text-sm">This import is in EUR. Change Delta’s currency to EUR before importing; currency conversion is not supported.</p>}
-          <p className="text-sm">For transfers between your accounts, import one side as a transfer and skip the matching entry from the other bank.</p>
-        </div>
+        </Card>
         {loading || !bankImportReady ? <p role="status">Loading your existing transactions…</p> : rows.map((row, i) => {
           const original = payload.transactions[i];
           const info = duplicate(i);
           const disabled = busy || info.exact;
           const type = original.amountCents > 0 ? 'income' : 'expense';
-          return <fieldset key={row.source.key} disabled={disabled} className="rounded-2xl border border-black/10 dark:border-white/10 p-4 space-y-3 min-w-0">
-            <legend className="px-1 text-sm">{original.date} · {(original.amountCents / 100).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</legend>
-            <label className="flex items-start gap-3 font-medium">
-              <input type="checkbox" className="mt-1" checked={isSelected(i)} disabled={disabled || !account} onChange={e => patch(i, { selected: e.target.checked })} />
-              <span className="break-words">{original.name}</span>
+          return <fieldset key={row.source.key} aria-label={original.name} disabled={disabled} className="rounded-[32px] bg-black/5 dark:bg-white/5 p-4 sm:p-5 min-w-0 space-y-3">
+            <label className="flex items-center gap-3 cursor-pointer p-1">
+              <input aria-label={`Select ${original.name}`} type="checkbox" className="h-5 w-5 shrink-0 accent-black dark:accent-white cursor-pointer disabled:cursor-default" checked={isSelected(i)} disabled={disabled} onChange={e => patch(i, { selected: e.target.checked })} />
+              <span className="min-w-0 flex-1"><span className="block text-sm font-bold break-words">{original.name}</span><span className="text-[10px] uppercase tracking-wider opacity-40">{original.date}</span></span>
+              <span className={cn('font-bold text-sm whitespace-nowrap', type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500')}>{formatCurrency(original.amountCents / 100, 'EUR')}</span>
             </label>
             {info.exact && <p className="text-sm text-emerald-700 dark:text-emerald-400">{row.saved || 'Already imported'}</p>}
-            {!!info.matches.length && !info.exact && <p className="text-sm text-amber-700 dark:text-amber-400">Possible duplicate: {info.matches.map(t => t.name).slice(0, 3).join(', ')}. Same date and amount; select only if this is another transaction.</p>}
-            {info.repeated && !info.exact && <p className="text-sm text-amber-700 dark:text-amber-400">Identical payments occur in this draft. Select each legitimate payment explicitly.</p>}
+            {!!info.matches.length && !info.exact && <p className="text-xs text-amber-700 dark:text-amber-400">Possible match: {info.matches.map(t => `${t.name}${t.status === 'pending' ? ' (pending)' : ''}`).slice(0, 3).join(', ')}</p>}
+            {info.repeated && !info.exact && <p className="text-xs text-amber-700 dark:text-amber-400">Identical payments in this draft</p>}
             {row.error && <p role="alert" className="text-sm text-red-600">{row.error}</p>}
-            {!info.exact && <>
-              <label className="block text-xs">Name<Input value={row.name} maxLength={500} onChange={e => patch(i, { name: e.target.value })} /></label>
-              <label className="block text-xs">Type
-                <select className={selectClass} value={row.transfer ? 'transfer' : type} onChange={e => patch(i, { transfer: e.target.value === 'transfer' })}>
+            {!info.exact && <div className="bg-white dark:bg-black/20 rounded-2xl p-4 space-y-4 shadow-sm">
+              <label className="block"><span className={labelClass}>Name</span><Input icon={AlignLeft} value={row.name} maxLength={500} onChange={e => patch(i, { name: e.target.value })} /></label>
+              <div><span className={labelClass}>Type</span>
+                <Select aria-label="Type" icon={ArrowRightLeft} value={row.transfer ? 'transfer' : type} onChange={e => patch(i, { transfer: e.target.value === 'transfer' })}>
                   <option value={type}>{type === 'income' ? 'Income' : 'Expense'}</option><option value="transfer">Transfer between my accounts</option>
-                </select>
-              </label>
-              {row.transfer ? <label className="block text-xs">{type === 'income' ? 'From account' : 'To account'}
-                <select className={selectClass} value={row.otherAccountId} onChange={e => patch(i, { otherAccountId: e.target.value })}>
+                </Select>
+              </div>
+              {row.transfer ? <div><span className={labelClass}>{type === 'income' ? 'From account' : 'To account'}</span>
+                <Select aria-label={type === 'income' ? 'From account' : 'To account'} icon={CreditCard} value={row.otherAccountId} onChange={e => patch(i, { otherAccountId: e.target.value })}>
                   <option value="">Choose the other account</option>
                   {activeAccounts.filter(a => a.id !== accountId).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
-              </label> : <label className="block text-xs">Category · bank hint: {original.bankCategory || 'none'}
-                <select className={selectClass} value={row.categoryId || defaultCategory(i)} onChange={e => patch(i, { categoryId: e.target.value })}>
+                </Select>
+              </div> : <div><span className={labelClass}>Category</span>
+                <Select aria-label="Category" icon={Layers} value={row.categoryId || defaultCategory(i)} onChange={e => patch(i, { categoryId: e.target.value })}>
                   <option value="">Choose a category</option>
                   {categories.filter(c => !c.type || c.type === 'both' || c.type === type).map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                </select>
-              </label>}
-              {account?.isShared && !row.transfer && <label className="block text-xs">My share (%)<Input type="number" min={0} max={100} step="any" value={row.share ?? (account.defaultMyShareRatio ?? 0.5) * 100} onChange={e => patch(i, { share: e.target.value === '' ? NaN : Number(e.target.value) })} /></label>}
-              {!!tags.length && <details><summary className="text-xs cursor-pointer">Tags ({row.tagIds.length})</summary><div className="flex flex-wrap gap-3 py-2">
-                {tags.map(tag => <label key={tag.id} className="text-xs flex items-center gap-1"><input type="checkbox" checked={row.tagIds.includes(tag.id)} onChange={e => patch(i, { tagIds: e.target.checked ? [...row.tagIds, tag.id] : row.tagIds.filter(id => id !== tag.id) })} />{tag.label}</label>)}
+                </Select>
+              </div>}
+              <div><span className={labelClass}>Status</span><Select aria-label="Status" icon={Clock3} value={row.status} onChange={e => patch(i, { status: e.target.value as 'normal' | 'pending' })}><option value="normal">Normal</option><option value="pending">Pending</option></Select></div>
+              {account?.isShared && !row.transfer && <label className="block"><span className={labelClass}>My share (%)</span><Input type="number" min={0} max={100} step="any" value={row.share ?? (account.defaultMyShareRatio ?? 0.5) * 100} onChange={e => patch(i, { share: e.target.value === '' ? NaN : Number(e.target.value) })} /></label>}
+              {!!tags.length && <details><summary className="text-[10px] font-bold uppercase tracking-wider opacity-50 cursor-pointer">Tags ({row.tagIds.length})</summary><div className="flex flex-wrap gap-3 py-2">
+                {tags.map(tag => <label key={tag.id} className="text-xs flex items-center gap-2 cursor-pointer"><input type="checkbox" className="h-4 w-4 accent-black dark:accent-white" checked={row.tagIds.includes(tag.id)} onChange={e => patch(i, { tagIds: e.target.checked ? [...row.tagIds, tag.id] : row.tagIds.filter(id => id !== tag.id) })} />{tag.label}</label>)}
               </div></details>}
-              <label className="block text-xs">Notes<Input value={row.description} maxLength={2000} onChange={e => patch(i, { description: e.target.value })} /></label>
-            </>}
+              <label className="block"><span className={labelClass}>Notes</span><Input icon={AlignLeft} placeholder="Optional" value={row.description} maxLength={2000} onChange={e => patch(i, { description: e.target.value })} /></label>
+            </div>}
           </fieldset>;
         })}
+        {!!payload.warnings.length && <details className="text-xs opacity-60"><summary className="cursor-pointer">Import notices ({payload.warnings.length})</summary>{payload.warnings.map((warning, i) => <p key={i} className="mt-2">{warning}</p>)}</details>}
         <div className="sticky bottom-24 p-3 rounded-2xl bg-background border border-black/10 dark:border-white/10 space-y-2 shadow-lg">
-          <Button className="w-full" onClick={save} disabled={busy || loading || !bankImportReady || !selectedCount || settings.currency !== 'EUR'}>{busy ? 'Saving…' : `Validate ${selectedCount} transactions`}</Button>
+          <Button className="w-full" onClick={save} disabled={busy || loading || !bankImportReady || !account || !selectedCount || settings.currency !== 'EUR'}>{busy ? 'Saving…' : !account ? 'Choose an account to import' : `Validate ${selectedCount} transactions`}</Button>
           <Button className="w-full" variant="ghost" onClick={discard} disabled={busy}>Clear draft</Button>
         </div>
       </>}

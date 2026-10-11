@@ -19,7 +19,6 @@ export function extractBankTransactions(document, bank, sourceUrl) {
   };
   const transactions = [];
   const warnings = [];
-  let pending = 0;
   let rejected = 0;
   let accountRef = '';
   const url = new URL(sourceUrl);
@@ -35,9 +34,9 @@ export function extractBankTransactions(document, bank, sourceUrl) {
         continue;
       }
       if (!row.matches('[data-operations-item]')) continue;
-      if (row.getAttribute('data-is-auth') === 'true') { pending++; continue; }
       try {
-        if (row.getAttribute('data-is-auth') !== 'false') throw new Error('Unknown operation status');
+        const authorization = row.getAttribute('data-is-auth');
+        if (!['true', 'false'].includes(authorization)) throw new Error('Unknown operation status');
         const rowAccount = row.querySelector('[data-account-key]')?.getAttribute('data-account-key');
         if (!accountRef) accountRef = rowAccount || '';
         if (rowAccount && accountRef !== rowAccount) throw new Error('Mixed accounts');
@@ -48,7 +47,7 @@ export function extractBankTransactions(document, bank, sourceUrl) {
         if (!sourceId || !bookingDate || !name || !amountCents) throw new Error('Incomplete operation');
         if (seen.has(sourceId)) continue;
         seen.add(sourceId);
-        transactions.push({ sourceId, date: bookingDate, amountCents, name, description,
+        transactions.push({ sourceId, date: bookingDate, amountCents, name, description, status: authorization === 'true' ? 'pending' : 'normal',
           bankCategory: text(row.querySelector('.list-operation-item__category')) });
       } catch { rejected++; }
     }
@@ -65,16 +64,16 @@ export function extractBankTransactions(document, bank, sourceUrl) {
         if (cells.length !== 4 || !name || Boolean(debit) === Boolean(credit)) throw new Error('Unknown table layout');
         const amountCents = debit ? -Math.abs(money(debit)) : Math.abs(money(credit));
         if (!amountCents) throw new Error('Zero operation');
-        transactions.push({ date: date(text(row.querySelector('[id$=".opDate"]'))), amountCents, name,
+        transactions.push({ date: date(text(row.querySelector('[id$=".opDate"]'))), amountCents, name, status: 'normal',
           description: name, bankCategory: text(label?.querySelector('.doux')) });
       } catch { rejected++; }
     }
     warnings.push('CIC does not expose stable transaction IDs in this view. Matching uses the booking date, amount and original description; review identical payments carefully.');
   } else throw new Error('Unsupported bank');
   if (!accountRef) throw new Error('Cannot identify this bank account. Open its individual transaction page.');
-  if (!transactions.length) throw new Error(`No booked transactions could be read (${pending} pending, ${rejected} unreadable).`);
+  if (!transactions.length) throw new Error(`No transactions could be read (${rejected} unreadable).`);
   if (transactions.length > 1000) throw new Error('Limit the displayed range to 1,000 transactions or fewer.');
   if (rejected) warnings.push(`${rejected} rows could not be read and were excluded. Check them in your bank.`);
-  if (pending) warnings.push(`${pending} pending card authorizations were excluded. Import them after they are booked.`);
-  return { version: 1, bank, accountRef, currency: 'EUR', transactions, warnings };
+  // v2 requires an app that preserves pending status; older apps must reject it.
+  return { version: 2, bank, accountRef, currency: 'EUR', transactions, warnings };
 }

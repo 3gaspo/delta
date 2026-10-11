@@ -214,6 +214,9 @@ export function Select({
 
       {/* Trigger Button */}
       <button
+        id={props.id}
+        aria-label={props['aria-label']}
+        aria-labelledby={props['aria-labelledby']}
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen(prev => !prev)}
