@@ -79,6 +79,7 @@ test('userscript bridge accepts only same-window same-origin requests and clears
   const replies: any[] = [];
   const window = { addEventListener: (_: string, fn: any) => { listener = fn; }, postMessage: (value: any) => replies.push(value) };
   runInNewContext(readFileSync('public/delta-bank-import.user.js', 'utf8'), {
+    document: { addEventListener: () => {} },
     window, location: { origin: 'https://delta-d85d8.web.app' },
     GM_listValues: () => [...store.keys()], GM_getValue: (k: string) => store.get(k), GM_deleteValue: (k: string) => store.delete(k),
   });
@@ -91,4 +92,34 @@ test('userscript bridge accepts only same-window same-origin requests and clears
   assert.equal(replies[0].payload, draft.payload);
   listener!({ ...event, data: { type: 'delta-bank-import:clear', token } });
   assert.equal(store.has('delta-import:' + token), false);
+});
+
+test('DOM bridge uses JSON strings, scopes access to the current draft, and clears drafts', () => {
+  const token = '12345678-1234-1234-1234-123456789abc';
+  const other = '87654321-4321-4321-4321-cba987654321';
+  const store = new Map<string, any>([['delta-import:' + token, { createdAt: Date.now(), payload: payload() }]]);
+  const { document, CustomEvent } = parseHTML('<html></html>');
+  const replies: any[] = [];
+  document.addEventListener('delta-bank-import:reply', (event: any) => {
+    assert.equal(typeof event.detail, 'string');
+    replies.push(JSON.parse(event.detail));
+  });
+  runInNewContext(readFileSync('public/delta-bank-import.user.js', 'utf8'), {
+    document, CustomEvent, URLSearchParams,
+    window: { addEventListener: () => {} },
+    location: { origin: 'https://delta-d85d8.web.app', hash: '#bank-import=' + token },
+    GM_listValues: () => [...store.keys()], GM_getValue: (key: string) => store.get(key), GM_deleteValue: (key: string) => store.delete(key),
+  });
+  const request = (detail: unknown) => document.dispatchEvent(new CustomEvent('delta-bank-import:request', { detail }));
+  request('not json');
+  request(JSON.stringify({ type: 'delta-bank-import:request', token: other }));
+  request({ type: 'delta-bank-import:request', token });
+  assert.equal(replies.length, 0);
+  request(JSON.stringify({ type: 'delta-bank-import:request', token }));
+  assert.equal(replies[0].type, 'delta-bank-import:payload');
+  assert.deepEqual(replies[0].payload, payload());
+  request(JSON.stringify({ type: 'delta-bank-import:clear', token }));
+  assert.equal(store.size, 0);
+  request(JSON.stringify({ type: 'delta-bank-import:request', token }));
+  assert.equal(replies[1].type, 'delta-bank-import:expired');
 });

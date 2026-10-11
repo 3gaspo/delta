@@ -4,7 +4,7 @@ import { extractBankTransactions } from './bank-extractors.mjs';
 const header = `// ==UserScript==
 // @name         Delta — CIC & BoursoBank import
 // @namespace    https://delta-d85d8.web.app
-// @version      1.0.0
+// @version      1.0.1
 // @description  Review loaded bank transactions in Delta before saving.
 // @match        https://www.cic.fr/fr/banque/mouvements.html*
 // @match        https://clients.boursobank.com/compte/*

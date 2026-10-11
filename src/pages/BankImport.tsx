@@ -40,18 +40,23 @@ export default function BankImport() {
     if (!/^[0-9a-f-]{36}$/.test(token)) { setError('Invalid import link. Collect transactions again.'); return; }
     let disposed = false;
     let received = false;
-    const receive = async (event: MessageEvent) => {
-      if (event.source !== window || event.origin !== location.origin || event.data?.token !== token) return;
-      if (event.data.type === 'delta-bank-import:expired' && !received) {
+    let interval: ReturnType<typeof setInterval>;
+    let timeout: ReturnType<typeof setTimeout>;
+    const receiveReply = async (reply: any) => {
+      if (reply?.token !== token) return;
+      if (reply.type === 'delta-bank-import:expired' && !received) {
+        received = true;
         setError('This draft has expired. Return to your bank and click “Review loaded transactions in Delta”.');
         clearInterval(interval);
+        clearTimeout(timeout);
         return;
       }
-      if (event.data.type !== 'delta-bank-import:payload' || received) return;
+      if (reply.type !== 'delta-bank-import:payload' || received) return;
       received = true;
       clearInterval(interval);
+      clearTimeout(timeout);
       try {
-        const next = validateBankPayload(event.data.payload);
+        const next = validateBankPayload(reply.payload);
         const sources = await identifyBankRows(next);
         if (disposed) return;
         setPayload(next);
@@ -60,15 +65,34 @@ export default function BankImport() {
         setError('');
       } catch (e) { if (!disposed) setError(e instanceof Error ? e.message : 'Invalid import draft.'); }
     };
-    const request = () => window.postMessage({ type: 'delta-bank-import:request', token }, location.origin);
+    const receive = (event: MessageEvent) => {
+      if (event.source === window && event.origin === location.origin) void receiveReply(event.data);
+    };
+    const receiveDom = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (typeof detail !== 'string' || detail.length > 5_000_000) return;
+      try { void receiveReply(JSON.parse(detail)); } catch { /* Ignore unrelated events. */ }
+    };
+    const request = () => {
+      const detail = { type: 'delta-bank-import:request', token };
+      document.dispatchEvent(new CustomEvent('delta-bank-import:request', { detail: JSON.stringify(detail) }));
+      if (!received) window.postMessage(detail, location.origin);
+    };
     window.addEventListener('message', receive);
-    const interval = setInterval(request, 700);
-    request();
-    const timeout = setTimeout(() => {
+    document.addEventListener('delta-bank-import:reply', receiveDom);
+    interval = setInterval(request, 700);
+    timeout = setTimeout(() => {
       clearInterval(interval);
-      if (!received && !disposed) setError('No userscript response. Enable the Delta userscript on this site, then reload this page.');
+      if (!received && !disposed) setError('No userscript response. Update the Delta userscript to version 1.0.1 or later, allow it on this site, then reload this page.');
     }, 10000);
-    return () => { disposed = true; clearInterval(interval); clearTimeout(timeout); window.removeEventListener('message', receive); };
+    request();
+    return () => {
+      disposed = true;
+      clearInterval(interval);
+      clearTimeout(timeout);
+      window.removeEventListener('message', receive);
+      document.removeEventListener('delta-bank-import:reply', receiveDom);
+    };
   }, [token, discarded]);
 
   const patch = (index: number, changes: Partial<ReviewRow>) => setRows(old => old.map((row, i) => i === index ? { ...row, ...changes } : row));
@@ -142,7 +166,9 @@ export default function BankImport() {
   }
 
   function discard() {
-    window.postMessage({ type: 'delta-bank-import:clear', token }, location.origin);
+    const detail = { type: 'delta-bank-import:clear', token };
+    document.dispatchEvent(new CustomEvent('delta-bank-import:request', { detail: JSON.stringify(detail) }));
+    window.postMessage(detail, location.origin);
     history.replaceState(null, '', location.pathname);
     setDiscarded(true);
     setRows([]);

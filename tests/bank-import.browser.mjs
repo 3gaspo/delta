@@ -2,6 +2,7 @@
 // install Playwright, then run `node tests/bank-import.browser.mjs`.
 // Uses an isolated Chrome profile and synthetic local-only data.
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const browser = await chromium.launch({ headless: true, channel: 'chrome' });
 try {
@@ -33,7 +34,11 @@ try {
       { sourceId: 'lunch', date: '2026-10-08', amountCents: -1200, name: 'Lunch', description: 'RESTAURANT', bankCategory: 'Food' },
     ] };
     window.addEventListener('message', event => {
-      if (event.data?.type === 'delta-bank-import:request') window.postMessage({ type: 'delta-bank-import:payload', token: event.data.token, payload }, location.origin);
+      if (event.data?.type === 'delta-bank-import:request') {
+        if (new URLSearchParams(location.search).has('isolated-world')) return;
+        const type = new URLSearchParams(location.search).has('expired-draft') ? 'delta-bank-import:expired' : 'delta-bank-import:payload';
+        window.postMessage({ type, token: event.data.token, payload }, location.origin);
+      }
     });
   });
   await page.goto('http://localhost:3000/import#bank-import=12345678-1234-1234-1234-123456789abc');
@@ -75,8 +80,38 @@ try {
   await page.getByRole('button', { name: 'Clear draft', exact: true }).click();
   await page.getByText('Draft cleared. Saved transactions remain in Delta.').waitFor();
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('delta_dev-user-001_transactions')).length), 3);
+  await page.goto('http://localhost:3000/import?expired-draft#bank-import=12345678-1234-1234-1234-123456789abc');
+  await page.getByRole('alert').filter({ hasText: 'This draft has expired.' }).waitFor();
+  // Wait beyond the bridge timeout: an actual reply must never become "no response".
+  await page.waitForTimeout(10500);
+  assert.match(await page.getByRole('alert').innerText(), /This draft has expired/);
+  assert.equal(await page.getByText('No userscript response.', { exact: false }).count(), 0);
+  // Exercise the actual generated userscript in a separate Chromium world.
+  // Disable its legacy postMessage sender to prove the DOM transport works alone.
+  await page.goto('http://localhost:3000/import?isolated-world#bank-import=12345678-1234-1234-1234-123456789abc');
+  const cdp = await page.context().newCDPSession(page);
+  const { frameTree } = await cdp.send('Page.getFrameTree');
+  const { executionContextId } = await cdp.send('Page.createIsolatedWorld', { frameId: frameTree.frame.id, worldName: 'delta-userscript-test' });
+  const isolatedPayload = { version: 1, bank: 'boursobank', accountRef: 'a'.repeat(64), currency: 'EUR', warnings: [], transactions: [
+    { sourceId: 'isolated', date: '2026-10-09', amountCents: -505, name: 'Isolated-world transaction', description: 'SYNTHETIC', bankCategory: 'Food' },
+  ] };
+  const injected = await cdp.send('Runtime.evaluate', { contextId: executionContextId, expression: `
+    const entries = new Map([['delta-import:12345678-1234-1234-1234-123456789abc', {createdAt: Date.now(), payload: ${JSON.stringify(isolatedPayload)}}]]);
+    globalThis.GM_listValues = () => [...entries.keys()];
+    globalThis.GM_getValue = key => entries.get(key);
+    globalThis.GM_deleteValue = key => entries.delete(key);
+    window.postMessage = () => {};
+    ${readFileSync('public/delta-bank-import.user.js', 'utf8')}
+  ` });
+  assert.equal(injected.exceptionDetails, undefined);
+  await page.getByText('BoursoBank · 1 loaded transactions').waitFor();
+  await page.getByLabel('Delta account for this bank account').selectOption('a');
+  await page.getByRole('button', { name: 'Validate 1 transactions', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Clear draft', exact: true }).click();
+  const remaining = await cdp.send('Runtime.evaluate', { contextId: executionContextId, expression: 'entries.size', returnByValue: true });
+  assert.equal(remaining.result.value, 0);
   assert.deepEqual(errors, []);
-  console.log('PASS: mobile layout, duplicate exclusion, validation, incoming transfer, shared share, tags/notes, saving, repeat import and clearing.');
+  console.log('PASS: mobile layout, duplicate exclusion, validation, incoming transfer, shared share, tags/notes, saving, repeat import, clearing, expired-draft timeout, and isolated-world DOM bridge.');
 } finally {
   await browser.close();
 }

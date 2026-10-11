@@ -23,7 +23,9 @@ For local testing, run Delta at `http://localhost:3000`. On the bank page, use T
 
 The same userscript runs on the two bank domains and Delta. It keeps each draft in Tampermonkey storage under a random token and opens `/import#bank-import=<token>`. Transaction contents are never placed in the URL. The account identifier is SHA-256 hashed before handoff. Bank HTML, full URLs, anti-forgery tokens, cookies and credentials are not copied. Original bank descriptions may contain personal information and are retained as transaction metadata after validation.
 
-The Delta page requests the token’s draft through a same-origin, same-window message bridge. Drafts expire after 30 minutes; expired entries are removed the next time the script runs. Clearing a draft removes it immediately from userscript storage. A draft already displayed remains in memory until cleared or the page closes. No writes occur until validation in the signed-in Delta account.
+The Delta page requests the token’s draft through DOM events in the same document, using JSON string details to cross userscript isolation boundaries. The userscript only accepts a DOM request for the token in the current page’s fragment. A same-origin, same-window message bridge remains for v1 compatibility. Drafts expire after 30 minutes; expired entries are removed the next time the script runs. Clearing a draft removes it immediately from userscript storage. A draft already displayed remains in memory until cleared or the page closes. No writes occur until validation in the signed-in Delta account.
+
+If an enabled script produces **No userscript response**, update both the app and the installed userscript (version 1.0.1 or newer), reload both tabs, and create a fresh draft from the bank. Updating Git or deploying the app does not replace an already-installed Tampermonkey script: open the hosted `/delta-bank-import.user.js` link and confirm the update in Tampermonkey.
 
 ## Development
 

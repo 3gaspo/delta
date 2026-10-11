@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Delta — CIC & BoursoBank import
 // @namespace    https://delta-d85d8.web.app
-// @version      1.0.0
+// @version      1.0.1
 // @description  Review loaded bank transactions in Delta before saving.
 // @match        https://www.cic.fr/fr/banque/mouvements.html*
 // @match        https://clients.boursobank.com/compte/*
@@ -110,6 +110,25 @@ for (const key of GM_listValues()) {
 }
 
 if (isDelta) {
+  // DOM events cross userscript isolated worlds without comparing Window proxies.
+  // String details also avoid cross-compartment object access restrictions.
+  document.addEventListener('delta-bank-import:request', event => {
+    if (typeof event.detail !== 'string' || event.detail.length > 200) return;
+    let request;
+    try { request = JSON.parse(event.detail); } catch { return; }
+    const { type, token } = request || {};
+    const currentToken = new URLSearchParams(location.hash.slice(1)).get('bank-import');
+    if (!/^[0-9a-f-]{36}$/.test(token || '') || token !== currentToken) return;
+    const key = PREFIX + token;
+    if (type === 'delta-bank-import:clear') { GM_deleteValue(key); return; }
+    if (type !== 'delta-bank-import:request') return;
+    const entry = GM_getValue(key);
+    const reply = !entry || Date.now() - entry.createdAt > TTL
+      ? { type: 'delta-bank-import:expired', token }
+      : { type: 'delta-bank-import:payload', token, payload: entry.payload };
+    document.dispatchEvent(new CustomEvent('delta-bank-import:reply', { detail: JSON.stringify(reply) }));
+  });
+  // Keep v1 page compatibility while the app and userscript update separately.
   window.addEventListener('message', event => {
     if (event.source !== window || event.origin !== location.origin) return;
     const { type, token } = event.data || {};
