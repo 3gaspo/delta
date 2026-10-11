@@ -6,7 +6,7 @@ import { useAuth } from './AuthProvider';
 import { db, firebaseReady } from '../lib/firebase';
 import { 
   collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, 
-  writeBatch, getDocs 
+  writeBatch, getDocs, runTransaction
 } from 'firebase/firestore';
 import { generateDueTransactions } from '../utils/recurring';
 import { isInitialBalanceTx } from '../utils/financial';
@@ -117,6 +117,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     settings: DEFAULT_SETTINGS
   });
   const [loading, setLoading] = useState(true);
+  const [importReadyUid, setImportReadyUid] = useState<string | null>(null);
+  const [bankImportError, setBankImportError] = useState('');
 
   // Sync state helper
   const seedDefaults = useCallback(async (uid: string) => {
@@ -167,41 +169,54 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     const uid = user.uid;
     setLoading(true);
+    setImportReadyUid(null);
+    setBankImportError('');
 
     if (firebaseReady && db) {
+      const loaded = new Set<string>();
+      const markLoaded = (name: string) => {
+        loaded.add(name);
+        if (loaded.size === 5) setImportReadyUid(uid);
+      };
+      const importLoadFailed = () => setBankImportError('Could not load your existing data. Check your connection and reload before importing.');
       // Firebase Subscriptions
-      const unsubAccounts = onSnapshot(collection(db, `users/${uid}/accounts`), (snap) => {
+      const unsubAccounts = onSnapshot(collection(db, `users/${uid}/accounts`), { includeMetadataChanges: true }, (snap) => {
         const accounts = sortAccounts(snap.docs.map(d => d.data() as Account));
         setData(prev => ({ ...prev, accounts }));
-      });
+        if (!snap.metadata.fromCache) markLoaded('accounts');
+      }, importLoadFailed);
 
-      const unsubTransactions = onSnapshot(collection(db, `users/${uid}/transactions`), (snap) => {
+      const unsubTransactions = onSnapshot(collection(db, `users/${uid}/transactions`), { includeMetadataChanges: true }, (snap) => {
         const transactions = snap.docs.map(d => d.data() as Transaction);
         setData(prev => ({ ...prev, transactions }));
-      });
+        if (!snap.metadata.fromCache) markLoaded('transactions');
+      }, importLoadFailed);
 
       const unsubRecurring = onSnapshot(collection(db, `users/${uid}/recurring`), (snap) => {
         const recurringTransactions = snap.docs.map(d => d.data() as RecurringTransaction);
         setData(prev => ({ ...prev, recurringTransactions }));
       });
 
-      const unsubCategories = onSnapshot(collection(db, `users/${uid}/categories`), (snap) => {
+      const unsubCategories = onSnapshot(collection(db, `users/${uid}/categories`), { includeMetadataChanges: true }, (snap) => {
         const categories = snap.docs.map(d => d.data() as Category);
         setData(prev => ({ ...prev, categories: dedupeAndSortCategories(categories) }));
-      });
+        if (!snap.metadata.fromCache) markLoaded('categories');
+      }, importLoadFailed);
 
-      const unsubTags = onSnapshot(collection(db, `users/${uid}/tags`), (snap) => {
+      const unsubTags = onSnapshot(collection(db, `users/${uid}/tags`), { includeMetadataChanges: true }, (snap) => {
         const tags = snap.docs.map(d => d.data() as Tag);
         setData(prev => ({ ...prev, tags }));
-      });
+        if (!snap.metadata.fromCache) markLoaded('tags');
+      }, importLoadFailed);
 
-      const unsubSettings = onSnapshot(doc(db, `users/${uid}/settings`, 'main'), (snap) => {
+      const unsubSettings = onSnapshot(doc(db, `users/${uid}/settings`, 'main'), { includeMetadataChanges: true }, (snap) => {
         if (snap.exists()) {
           setData(prev => ({ ...prev, settings: snap.data() as UserSettings }));
+          if (!snap.metadata.fromCache) markLoaded('settings');
         } else {
           seedDefaults(uid);
         }
-      });
+      }, importLoadFailed);
 
       setLoading(false);
       return () => {
@@ -229,6 +244,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           settings: JSON.parse(s)
         });
         setLoading(false);
+        setImportReadyUid(uid);
       };
       loadLocal();
     }
@@ -505,6 +521,29 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const cleanData = sanitizeFirestoreData;
 
   // Actions
+  const importBankTransaction: DataContextValue['importBankTransaction'] = async (t) => {
+    if (!user) throw new Error('Sign in before importing.');
+    if (!/^[a-f0-9]{64}$/.test(t.bankImport.key)) throw new Error('Invalid import identity.');
+    const id = `bank_${t.bankImport.key}`;
+    const now = Date.now();
+    const docData = cleanData({ ...t, id, createdAt: now, updatedAt: now });
+    if (firebaseReady && db) {
+      const ref = doc(db, `users/${user.uid}/transactions`, id);
+      return runTransaction(db, async transaction => {
+        if ((await transaction.get(ref)).exists()) return false;
+        transaction.set(ref, docData);
+        return true;
+      });
+    }
+    const storageKey = `delta_${user.uid}_transactions`;
+    const existing: Transaction[] = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    if (existing.some(row => row.id === id || row.bankImport?.key === t.bankImport.key)) return false;
+    const updated = [...existing, docData];
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    setData(prev => ({ ...prev, transactions: updated }));
+    return true;
+  };
+
   const addTransaction = async (t: any) => {
     const id = crypto.randomUUID();
     const now = Date.now();
@@ -1093,8 +1132,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   return (
     <DataContext.Provider value={{
       ...data,
+      bankImportReady: Boolean(user && importReadyUid === user.uid && !bankImportError),
+      bankImportError,
       loading,
-      addTransaction, updateTransaction, deleteTransaction, saveGroupTransaction, deleteGroupTransaction,
+      addTransaction, importBankTransaction, updateTransaction, deleteTransaction, saveGroupTransaction, deleteGroupTransaction,
       addRecurringTransaction, updateRecurringTransaction, deleteRecurringTransaction,
       addAccount, updateAccount, deleteAccount, reorderAccounts,
       addCategory, updateCategory, deleteCategory,

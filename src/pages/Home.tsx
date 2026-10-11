@@ -1,11 +1,12 @@
 import { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useData } from '../providers/DataProvider';
 import { PageContainer } from '../components/layout/PageContainer';
 import { TransactionList } from '../components/transactions/TransactionList';
 import { Card, Button, Input, Select } from '../components/ui/Base';
 import { Modal } from '../components/ui/Modal';
 import { TransactionForm, FormTabMode } from '../components/transactions/TransactionForm';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, Download } from 'lucide-react';
 import { computeFinancialTotals } from '../utils/financial';
 
 export default function Home() {
@@ -58,6 +59,7 @@ export default function Home() {
       title="Delta" 
       actions={
         <div className="flex items-center gap-2">
+          <Link to="/import" title="Import bank transactions" aria-label="Import bank transactions" className="p-3 rounded-2xl bg-black/5 dark:bg-white/5"><Download size={20} /></Link>
           <Button size="icon" onClick={() => handleOpenAdd('single')} title="New Transaction">
             <Plus size={20} />
           </Button>

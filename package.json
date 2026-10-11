@@ -4,6 +4,8 @@
   "version": "0.3.0",
   "type": "module",
   "scripts": {
+    "build:userscript": "node scripts/build-userscript.mjs",
+    "test:bank-import": "tsx --test tests/bank-import.test.ts",
     "dev": "vite --port=3000 --host=0.0.0.0",
     "build": "vite build",
     "preview": "vite preview",
@@ -32,6 +34,7 @@
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
     "autoprefixer": "^10.4.21",
+    "linkedom": "^0.18.13",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",

@@ -1,3 +1,5 @@
+import type { BankImportSource } from './lib/bankImport';
+
 export type AccountType = 'regular' | 'debt';
 export type DebtDirection = 'receivable' | 'payable';
 
@@ -20,6 +22,7 @@ export type TransactionType = 'expense' | 'income' | 'transfer' | 'subscription'
 export type TransactionStatus = 'normal' | 'pending' | 'hidden';
 
 export interface Transaction {
+  bankImport?: BankImportSource;
   id: string;
   amount: number;
   date: number;
@@ -99,6 +102,8 @@ export interface User {
 }
 
 export interface DataContextValue {
+  bankImportReady: boolean;
+  bankImportError: string;
   accounts: Account[];
   transactions: Transaction[];
   recurringTransactions: RecurringTransaction[];
@@ -108,6 +113,7 @@ export interface DataContextValue {
   loading: boolean;
   
   addTransaction: (t: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  importBankTransaction: (t: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> & { bankImport: BankImportSource }) => Promise<boolean>;
   updateTransaction: (id: string, t: Partial<Transaction>) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   saveGroupTransaction: (groupId: string, subtransactions: any[]) => Promise<void>;

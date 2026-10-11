@@ -7,6 +7,7 @@ import Accounts from './pages/Accounts';
 import Stats from './pages/Stats';
 import Settings from './pages/Settings';
 import AuthPage from './pages/Auth';
+import BankImport from './pages/BankImport';
 
 function AppRoutes() {
   const { user, loading } = useAuth();
@@ -27,6 +28,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<Navigate to="/home" replace />} />
       <Route path="/home" element={<Home />} />
+      <Route path="/import" element={<BankImport key={user.uid} />} />
       <Route path="/accounts" element={<Accounts />} />
       <Route path="/stats" element={<Stats />} />
       <Route path="/settings" element={<Settings />} />
