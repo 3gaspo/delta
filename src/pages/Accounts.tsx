@@ -126,14 +126,14 @@ export default function Accounts() {
       <div className="mb-8 p-6 sm:p-8 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-[40px] flex flex-col gap-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 sm:gap-x-8 gap-y-1 sm:gap-y-2 items-baseline">
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-40 sm:col-start-1 sm:row-start-1">Current Assets</p>
-          <p className="text-3xl sm:text-4xl font-black tracking-tighter min-w-0 break-words sm:col-start-1 sm:row-start-2">
+          <p className="text-2xl font-black tracking-tighter min-w-0 whitespace-nowrap sm:col-start-1 sm:row-start-2">
             {formatCurrency(currentAssets, settings.currency)}
           </p>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-40 mt-4 sm:mt-0 sm:col-start-2 sm:row-start-1">
             Net Worth <span className="text-[9px] tracking-normal">(End of Month)</span>
           </p>
           <p className={cn(
-            "text-3xl sm:text-4xl font-black tracking-tighter min-w-0 break-words sm:col-start-2 sm:row-start-2",
+            "text-2xl font-black tracking-tighter min-w-0 whitespace-nowrap sm:col-start-2 sm:row-start-2",
             projectedNetWorth >= 0 ? "text-foreground" : "text-red-500"
           )}>
             {formatCurrency(projectedNetWorth, settings.currency)}
