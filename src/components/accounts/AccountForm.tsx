@@ -26,6 +26,10 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
     defaultMyShareRatio: initialData?.defaultMyShareRatio ?? 0.5
   });
 
+  const [isCustomShare, setIsCustomShare] = useState(
+    formData.defaultMyShareRatio !== 0.5 && formData.defaultMyShareRatio !== 1
+  );
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(initialDeleteConfirm);
@@ -251,7 +255,6 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
                 </div>
                 <div>
                   <span className="text-sm font-bold block text-foreground">Shared Account</span>
-                  <span className="text-[10px] opacity-50 block">Split expenses with partner, roommate, or friends</span>
                 </div>
               </div>
               <input 
@@ -274,19 +277,16 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
                     { label: 'Custom', val: 'custom' }
                   ].map(opt => {
                     const isSelected = opt.val === 'custom' 
-                      ? (formData.defaultMyShareRatio !== 0.5 && formData.defaultMyShareRatio !== 1.0)
-                      : formData.defaultMyShareRatio === opt.val;
+                      ? isCustomShare
+                      : !isCustomShare && formData.defaultMyShareRatio === opt.val;
                     return (
                       <button
                         key={opt.label}
                         type="button"
                         onClick={() => {
+                          setIsCustomShare(opt.val === 'custom');
                           if (opt.val !== 'custom') {
                             setFormData({ ...formData, defaultMyShareRatio: opt.val as number });
-                          } else {
-                            if (formData.defaultMyShareRatio === 0.5 || formData.defaultMyShareRatio === 1.0) {
-                              setFormData({ ...formData, defaultMyShareRatio: 0.6 });
-                            }
                           }
                         }}
                         className={cn(
@@ -301,9 +301,11 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
                     );
                   })}
                 </div>
-                {(formData.defaultMyShareRatio !== 0.5 && formData.defaultMyShareRatio !== 1.0) && (
+                {isCustomShare && (
                   <div className="flex items-center gap-2 pt-1">
                     <Input
+                      aria-label="Default personal share (%)"
+                      autoFocus
                       type="number"
                       min="0"
                       max="100"
@@ -318,9 +320,6 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
                     <span className="text-xs font-semibold opacity-60">% My Share</span>
                   </div>
                 )}
-                <p className="text-[10px] opacity-40 leading-relaxed">
-                  Only your share is counted towards your personal expenses and budget, while the true total is deducted from this account.
-                </p>
               </div>
             )}
           </div>
@@ -339,7 +338,6 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
                 <EyeOff size={16} />
                 <span className="text-sm font-bold uppercase tracking-wider">Hide Account</span>
               </div>
-              <span className="text-[10px] opacity-40">Excluded from net worth and aggregate metrics</span>
             </div>
           </label>
 

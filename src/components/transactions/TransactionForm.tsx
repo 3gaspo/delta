@@ -156,10 +156,12 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
     if (initialData?.myShareAmount !== undefined) return initialData.myShareAmount.toString();
     if (rawAmount && selectedAccount?.isShared) {
       const parsed = parseMoney(rawAmount.toString());
-      if (parsed > 0) return (parsed * (initialData?.myShareRatio ?? selectedAccount?.defaultMyShareRatio ?? 0.5)).toFixed(2);
+      if (parsed > 0) return (parsed * (initialRecurringData?.myShareRatio ?? initialData?.myShareRatio ?? selectedAccount?.defaultMyShareRatio ?? 0.5)).toFixed(2);
     }
     return '';
   });
+
+  const [isCustomShare, setIsCustomShare] = useState(() => myShareRatio !== 0.5 && myShareRatio !== 1);
 
   // Subscription specific state
   const [subscriptionType, setSubscriptionType] = useState<'expense' | 'income'>(
@@ -270,6 +272,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
     if (acc?.isShared) {
       const ratio = acc.defaultMyShareRatio ?? 0.5;
       setMyShareRatio(ratio);
+      setIsCustomShare(ratio !== 0.5 && ratio !== 1);
       const parsed = parseMoney(formData.amount);
       if (parsed > 0) {
         setMyShareAmount((parsed * ratio).toFixed(2));
@@ -886,13 +889,20 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                     { label: 'Custom', ratio: 'custom' }
                   ].map(opt => {
                     const isSelected = opt.ratio === 'custom'
-                      ? (myShareRatio !== 0.5 && myShareRatio !== 1.0)
-                      : myShareRatio === opt.ratio;
+                      ? isCustomShare
+                      : !isCustomShare && myShareRatio === opt.ratio;
                     return (
                       <button
                         key={opt.label}
                         type="button"
-                        onClick={() => {
+                        aria-pressed={isSelected}
+                        onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                          setIsCustomShare(opt.ratio === 'custom');
+                          if (opt.ratio === 'custom') {
+                            const input = e.currentTarget.form?.querySelector<HTMLInputElement>('input[aria-label="My share"]');
+                            input?.focus();
+                            input?.select();
+                          }
                           const parsedTotal = parseMoney(formData.amount) || 0;
                           if (opt.ratio !== 'custom') {
                             setMyShareRatio(opt.ratio as number);
@@ -919,8 +929,11 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                     </span>
                     <Input
                       placeholder="0.00"
+                      aria-label="My share"
+                      inputMode="decimal"
                       value={myShareAmount}
                       onChange={e => {
+                        setIsCustomShare(true);
                         setMyShareAmount(e.target.value);
                         const parsedShare = parseMoney(e.target.value);
                         const parsedTotal = parseMoney(formData.amount) || 0;
@@ -944,9 +957,6 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                   </div>
                 </div>
 
-                <p className="text-[10px] text-foreground/50 leading-relaxed">
-                  Only your share ({formatCurrency(parseMoney(myShareAmount) || 0, settings.currency)}) is counted in your expenses, while the full {formatCurrency(parseMoney(formData.amount) || 0, settings.currency)} is deducted from {selectedAccount?.name}.
-                </p>
               </div>
             )}
 
@@ -1419,7 +1429,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                   </label>
 
                   <label className="block">
-                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Transfer Periodicity</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Recurring Period</span>
                     <Select 
                       icon={Repeat}
                       value={transferPeriodicity}
@@ -1571,7 +1581,20 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Periodicity Interval</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
+                  Start Date
+                </span>
+                <Input
+                  type="date"
+                  icon={Calendar}
+                  value={formData.date}
+                  onChange={e => setFormData({ ...formData, date: e.target.value })}
+                  required
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Recurring Period</span>
                 <Select 
                   icon={Repeat}
                   value={periodicity}
@@ -1584,19 +1607,6 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                   <option value="365">Every 365 days (Yearly)</option>
                   <option value="custom">Custom interval in days...</option>
                 </Select>
-              </label>
-
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
-                  Start Date
-                </span>
-                <Input 
-                  type="date" 
-                  icon={Calendar}
-                  value={formData.date}
-                  onChange={e => setFormData({ ...formData, date: e.target.value })}
-                  required
-                />
               </label>
             </div>
 
@@ -1670,13 +1680,20 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                     { label: 'Custom', ratio: 'custom' }
                   ].map(opt => {
                     const isSelected = opt.ratio === 'custom'
-                      ? (myShareRatio !== 0.5 && myShareRatio !== 1.0)
-                      : myShareRatio === opt.ratio;
+                      ? isCustomShare
+                      : !isCustomShare && myShareRatio === opt.ratio;
                     return (
                       <button
                         key={opt.label}
                         type="button"
-                        onClick={() => {
+                        aria-pressed={isSelected}
+                        onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                          setIsCustomShare(opt.ratio === 'custom');
+                          if (opt.ratio === 'custom') {
+                            const input = e.currentTarget.form?.querySelector<HTMLInputElement>('input[aria-label="My share"]');
+                            input?.focus();
+                            input?.select();
+                          }
                           const parsedTotal = parseMoney(formData.amount) || 0;
                           if (opt.ratio !== 'custom') {
                             setMyShareRatio(opt.ratio as number);
@@ -1703,8 +1720,11 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                     </span>
                     <Input
                       placeholder="0.00"
+                      aria-label="My share"
+                      inputMode="decimal"
                       value={myShareAmount}
                       onChange={e => {
+                        setIsCustomShare(true);
                         setMyShareAmount(e.target.value);
                         const parsedShare = parseMoney(e.target.value);
                         const parsedTotal = parseMoney(formData.amount) || 0;
@@ -1728,9 +1748,6 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                   </div>
                 </div>
 
-                <p className="text-[10px] text-foreground/50 leading-relaxed">
-                  Only your share ({formatCurrency(parseMoney(myShareAmount) || 0, settings.currency)}) is counted in your expected monthly {subscriptionType === 'income' ? 'gains' : 'expenses'}.
-                </p>
               </div>
             )}
 

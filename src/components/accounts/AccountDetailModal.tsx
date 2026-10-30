@@ -100,33 +100,18 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
           </Button>
         </div>
 
-        {/* Overdraft Alert Banner */}
         {cashflowAlert && (cashflowAlert.isNegativeNow || cashflowAlert.willGoNegative) && (
-          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-950 dark:text-amber-100 space-y-2.5">
+          <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2">
             <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-bold text-xs uppercase tracking-wider">
               <AlertTriangle size={16} className="shrink-0" />
-              <span>Overdraft Alert: Cashflow Deficit Projected</span>
+              <span>{cashflowAlert.isNegativeNow ? 'Overdrawn' : 'Overdraft risk'}</span>
             </div>
-            <p className="text-xs leading-relaxed opacity-90">
-              {cashflowAlert.isNegativeNow ? (
-                <>
-                  This account currently has a negative balance of <strong className="text-red-500">{formatCurrency(cashflowAlert.currentBalance, settings.currency)}</strong>. 
-                  Projected to reach a low of <strong className="text-red-500 font-bold">{formatCurrency(cashflowAlert.lowestBalance, settings.currency)}</strong> on {formatDate(cashflowAlert.lowestBalanceDate)}.
-                </>
-              ) : (
-                <>
-                  Current balance is <strong>{formatCurrency(cashflowAlert.currentBalance, settings.currency)}</strong>. 
-                  On <strong>{formatDate(cashflowAlert.firstNegativeDate!)}</strong>, this account is projected to drop below 0 to <strong className="text-red-500 font-bold">{formatCurrency(cashflowAlert.firstNegativeBalance!, settings.currency)}</strong> after <span className="font-semibold">{cashflowAlert.triggeringEvent?.name}</span> ({formatCurrency(cashflowAlert.triggeringEvent?.amount || 0, settings.currency)}).
-                </>
-              )}
-            </p>
-            {cashflowAlert.shortfallAmount && !cashflowAlert.isNegativeNow && (
-              <div className="text-[11px] font-semibold text-amber-900 dark:text-amber-200 bg-amber-500/15 p-2 rounded-xl flex items-center gap-2">
-                <span>💡</span>
-                <span>
-                  Requires an expected gain or transfer of at least <strong>{formatCurrency(cashflowAlert.shortfallAmount, settings.currency)}</strong> before <strong>{formatDate(cashflowAlert.firstNegativeDate!)}</strong> to avoid dropping below 0.
-                </span>
-              </div>
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+              <strong className="text-red-500">{formatCurrency(cashflowAlert.isNegativeNow ? cashflowAlert.currentBalance : cashflowAlert.firstNegativeBalance!, settings.currency)}</strong>
+              <span className="text-xs opacity-60">{cashflowAlert.isNegativeNow ? 'Now' : formatDate(cashflowAlert.firstNegativeDate!)}</span>
+            </div>
+            {!cashflowAlert.isNegativeNow && (
+              <p className="text-xs text-amber-700 dark:text-amber-300 font-semibold">Top up: {formatCurrency(cashflowAlert.shortfallAmount || 0, settings.currency)}</p>
             )}
           </div>
         )}

@@ -96,7 +96,7 @@ export function AccountCard({ account, onClick, onEdit, onDelete }: AccountCardP
             {isDebt 
               ? (isReceivable ? 'Receivable' : 'Payable') 
               : (account.isShared 
-                  ? `Shared Account (${Math.round((account.defaultMyShareRatio ?? 0.5) * 100)}% My Share)` 
+                  ? `${Math.round((account.defaultMyShareRatio ?? 0.5) * 100)}% My Share`
                   : 'Regular Account')}
           </p>
         </div>

@@ -26,8 +26,8 @@ export default function Accounts() {
 
   const totals = useMemo(() => computeFinancialTotals(accounts, transactions), [accounts, transactions]);
   const expected = useMemo(
-    () => computeExpectedMonthlyFinancials(recurringTransactions, categories),
-    [recurringTransactions, categories]
+    () => computeExpectedMonthlyFinancials(recurringTransactions, categories, accounts),
+    [recurringTransactions, categories, accounts]
   );
 
   const currentAssets = totals.regularBalance;
@@ -72,10 +72,10 @@ export default function Accounts() {
             <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-bold text-xs uppercase tracking-wider">
               <AlertTriangle size={17} className="shrink-0" />
               <span>
-                Cashflow Alert: {cashflowAlerts.length} {cashflowAlerts.length === 1 ? 'account' : 'accounts'} at risk of going below 0
+                Overdraft risk: {cashflowAlerts.length} {cashflowAlerts.length === 1 ? 'account' : 'accounts'}
               </span>
             </div>
-            <span className="text-[10px] font-semibold opacity-60">Next 60 Days</span>
+            <span className="text-[10px] font-semibold opacity-60 shrink-0">Next 60 days</span>
           </div>
 
           <div className="space-y-2">
@@ -105,21 +105,15 @@ export default function Accounts() {
                     </div>
 
                     <p className="text-xs text-foreground/70 mt-1">
-                      {alert.isNegativeNow ? (
-                        <>Account is already below 0. Projected lowest point: <strong className="text-red-500">{formatCurrency(alert.lowestBalance, settings.currency)}</strong>.</>
-                      ) : (
-                        <>
-                          Current: <strong>{formatCurrency(alert.currentBalance, settings.currency)}</strong>. Overdraft triggered on <strong>{new Date(alert.firstNegativeDate!).toLocaleDateString([], { month: 'short', day: 'numeric' })}</strong> by <span className="font-semibold underline underline-offset-2">{alert.triggeringEvent?.name}</span> ({formatCurrency(alert.triggeringEvent?.amount || 0, settings.currency)}).
-                          {alert.shortfallAmount && (
-                            <> Needs an expected gain or transfer of at least <strong className="text-amber-700 dark:text-amber-300">+{formatCurrency(alert.shortfallAmount, settings.currency)}</strong> before then.</>
-                          )}
-                        </>
-                      )}
+                      {alert.isNegativeNow ? 'Lowest: ' : 'Top up: '}
+                      <strong className={alert.isNegativeNow ? 'text-red-500' : 'text-amber-700 dark:text-amber-300'}>
+                        {formatCurrency(alert.isNegativeNow ? alert.lowestBalance : alert.shortfallAmount || 0, settings.currency)}
+                      </strong>
                     </p>
                   </div>
 
                   <div className="flex items-center gap-1.5 text-xs font-bold text-amber-600 dark:text-amber-400 shrink-0 self-end sm:self-center">
-                    <span>View Sequence</span>
+                    <span>View forecast</span>
                     <ArrowRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
                   </div>
                 </div>
@@ -130,29 +124,20 @@ export default function Accounts() {
       )}
 
       <div className="mb-8 p-6 sm:p-8 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-[40px] flex flex-col gap-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 sm:gap-8 items-start">
-          <div>
-            <div className="flex items-center gap-2">
-              <p className="text-[10px] font-bold uppercase tracking-[0.25em] opacity-40">Current Assets</p>
-              <span className="text-[9px] font-bold opacity-30 uppercase">(Total Money)</span>
-            </div>
-            <p className="text-3xl sm:text-4xl font-black tracking-tighter mt-1">
-              {formatCurrency(currentAssets, settings.currency)}
-            </p>
-          </div>
-
-          <div>
-            <div className="flex items-center gap-2">
-              <p className="text-[10px] font-bold uppercase tracking-[0.25em] opacity-40">Net Worth</p>
-              <span className="text-[9px] font-bold opacity-30 uppercase">(End of Month)</span>
-            </div>
-            <p className={cn(
-              "text-3xl sm:text-4xl font-black tracking-tighter mt-1",
-              projectedNetWorth >= 0 ? "text-foreground" : "text-red-500"
-            )}>
-              {formatCurrency(projectedNetWorth, settings.currency)}
-            </p>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 sm:gap-x-8 gap-y-1 sm:gap-y-2 items-baseline">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-40 sm:col-start-1 sm:row-start-1">Current Assets</p>
+          <p className="text-3xl sm:text-4xl font-black tracking-tighter min-w-0 break-words sm:col-start-1 sm:row-start-2">
+            {formatCurrency(currentAssets, settings.currency)}
+          </p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-40 mt-4 sm:mt-0 sm:col-start-2 sm:row-start-1">
+            Net Worth <span className="text-[9px] tracking-normal">(End of Month)</span>
+          </p>
+          <p className={cn(
+            "text-3xl sm:text-4xl font-black tracking-tighter min-w-0 break-words sm:col-start-2 sm:row-start-2",
+            projectedNetWorth >= 0 ? "text-foreground" : "text-red-500"
+          )}>
+            {formatCurrency(projectedNetWorth, settings.currency)}
+          </p>
         </div>
 
         <div className="pt-4 border-t border-black/5 dark:border-white/5 grid grid-cols-3 gap-2 sm:gap-4 items-center">

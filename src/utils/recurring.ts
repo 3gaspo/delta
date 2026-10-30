@@ -59,12 +59,13 @@ export function calculateNextDueDate(rule: RecurringTransaction): number {
 
 export function sortRecurringByNextDate(rules: RecurringTransaction[]): RecurringTransaction[] {
   return [...rules].sort((a, b) => {
-    const nextA = calculateNextDueDate(a);
-    const nextB = calculateNextDueDate(b);
+    const nextA = new Date(calculateNextDueDate(a)).setHours(0, 0, 0, 0);
+    const nextB = new Date(calculateNextDueDate(b)).setHours(0, 0, 0, 0);
     if (nextA !== nextB) {
       return nextA - nextB;
     }
-    return (a.name || '').localeCompare(b.name || '');
+    const typeOrder = { expense: 0, income: 1, transfer: 2 };
+    return typeOrder[a.type] - typeOrder[b.type] || (a.name || '').localeCompare(b.name || '');
   });
 }
 
@@ -139,6 +140,8 @@ export function generateDueTransactions(
       if (rule.debtAccountId) {
         tx.debtAccountId = rule.debtAccountId;
       }
+      if (rule.myShareAmount !== undefined) tx.myShareAmount = rule.myShareAmount;
+      if (rule.myShareRatio !== undefined) tx.myShareRatio = rule.myShareRatio;
       newTransactions.push(tx);
       existingDates.add(dateKey);
       lastGenerated = startOfDayTime;

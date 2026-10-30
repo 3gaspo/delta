@@ -9,7 +9,7 @@ import {
 } from 'recharts';
 import { formatCurrency, cn } from '../lib/utils';
 import { TransactionType } from '../types';
-import { isInitialBalanceTx, getAccountBalance, computeFullPeriodAverages, getMyTransactionAmount } from '../utils/financial';
+import { isInitialBalanceTx, getMyAccountBalance, computeFinancialTotals, computeFullPeriodAverages, getMyTransactionAmount } from '../utils/financial';
 import { 
   startOfMonth, endOfMonth, format, eachMonthOfInterval, 
   startOfYear, startOfWeek, endOfWeek,
@@ -45,6 +45,7 @@ export default function Stats() {
         
         // Find main account
         const acc = accounts.find(a => a.id === t.accountId);
+        if (t.type !== 'transfer' && acc?.hidden) return false;
         if (!includeDebts && acc?.type === 'debt') return false;
         
         if (limitToAccount && limitToAccount !== 'all' && t.accountId !== limitToAccount && t.transferAccountId !== limitToAccount) return false;
@@ -62,94 +63,20 @@ export default function Stats() {
     // 1. Balance Data Generation
     const balanceIntervalStart = balancePeriod === 'monthly' ? startOfYear(now) : startOfMonth(now);
     const balanceIntervalEnd = endOfMonth(now);
-    const balanceFiltered = getFiltered(balanceAccountId).filter(t => t.date >= balanceIntervalStart.getTime() && t.date <= balanceIntervalEnd.getTime());
-
-    let currentRunningBalance = 0;
-    if (balanceAccountId === 'all') {
-      // Calculate total balance of all selected accounts
-      currentRunningBalance = accounts
-        .filter(a => includeDebts || a.type !== 'debt')
-        .reduce((sum, a) => sum + getAccountBalance(a.id, transactions, a), 0);
-    } else {
-      const a = accounts.find(acc => acc.id === balanceAccountId);
-      if (a) {
-        currentRunningBalance = getAccountBalance(a.id, transactions, a);
-      }
-    }
-
-    let balanceData = [];
-    if (balancePeriod === 'monthly') {
-      const months = eachMonthOfInterval({ start: balanceIntervalStart, end: balanceIntervalEnd });
-      balanceData = months.map(m => {
-        const mStart = startOfMonth(m).getTime();
-        const mEnd = endOfMonth(m).getTime();
-        const monthTransactions = balanceFiltered.filter(t => t.date >= mStart && t.date <= mEnd);
-        
-        let net = 0;
-        monthTransactions.forEach(t => {
-          if (isInitialBalanceTx(t)) return;
-          const isIncome = t.type === 'income';
-          const isExpense = t.type === 'expense' || t.type === 'subscription';
-          
-          if (balanceAccountId === 'all') {
-             if (isIncome) net += t.amount;
-             if (isExpense) net -= t.amount;
-          } else {
-             // Specific account
-             const isSource = t.accountId === balanceAccountId;
-             const isDest = t.transferAccountId === balanceAccountId;
-             if (t.type === 'transfer') {
-                if (isSource) net -= t.amount;
-                if (isDest) net += t.amount;
-             } else if (isIncome) {
-                net += t.amount;
-             } else {
-                net -= t.amount;
-             }
-          }
-        });
-
-        return { name: format(m, 'MMM'), net, timestamp: mEnd, value: 0 };
-      });
-    } else {
-      const weeks = eachWeekOfInterval({ start: balanceIntervalStart, end: balanceIntervalEnd });
-      balanceData = weeks.map((w, idx) => {
-        const wStart = startOfWeek(w).getTime();
-        const wEnd = endOfWeek(w).getTime();
-        const weekTransactions = balanceFiltered.filter(t => t.date >= wStart && t.date <= wEnd);
-        
-        let net = 0;
-        weekTransactions.forEach(t => {
-          if (isInitialBalanceTx(t)) return;
-          const isIncome = t.type === 'income';
-          const isExpense = t.type === 'expense' || t.type === 'subscription';
-          
-          if (balanceAccountId === 'all') {
-             if (isIncome) net += t.amount;
-             if (isExpense) net -= t.amount;
-          } else {
-             const isSource = t.accountId === balanceAccountId;
-             const isDest = t.transferAccountId === balanceAccountId;
-             if (t.type === 'transfer') {
-                if (isSource) net -= t.amount;
-                if (isDest) net += t.amount;
-             } else if (isIncome) {
-                net += t.amount;
-             } else {
-                net -= t.amount;
-             }
-          }
-        });
-
-        return { name: `W${idx + 1}`, net, timestamp: wEnd, value: 0 };
-      });
-    }
-
-    let runningVal = currentRunningBalance;
-    for (let i = balanceData.length - 1; i >= 0; i--) {
-      balanceData[i].value = runningVal;
-      runningVal -= balanceData[i].net;
-    }
+    const balanceAccounts = accounts.filter(a => !a.hidden && (includeDebts || a.type !== 'debt'));
+    const balanceTransactions = getFiltered(balanceAccountId);
+    const intervals = balancePeriod === 'monthly'
+      ? eachMonthOfInterval({ start: balanceIntervalStart, end: balanceIntervalEnd })
+      : eachWeekOfInterval({ start: balanceIntervalStart, end: balanceIntervalEnd });
+    const balanceData = intervals.map((interval, idx) => {
+      const timestamp = (balancePeriod === 'monthly' ? endOfMonth(interval) : endOfWeek(interval)).getTime();
+      const ledger = balanceTransactions.filter(t => t.date <= timestamp);
+      const account = balanceAccounts.find(a => a.id === balanceAccountId);
+      const value = balanceAccountId === 'all'
+        ? computeFinancialTotals(balanceAccounts, ledger).netWorth
+        : account ? getMyAccountBalance(account, ledger) : 0;
+      return { name: balancePeriod === 'monthly' ? format(interval, 'MMM') : `W${idx + 1}`, timestamp, value };
+    });
 
     // 2. Cash Flow Data
     const flowIntervalStart = flowPeriod === 'monthly' ? startOfYear(now) : startOfMonth(now);
@@ -178,8 +105,8 @@ export default function Stats() {
         
         if (flowTypeFilter !== 'all' && t.type !== flowTypeFilter) return;
 
-        if (isExpense) res.expenses += getMyTransactionAmount(t);
-        if (isIncome) res.income += getMyTransactionAmount(t);
+        if (isExpense) res.expenses += getMyTransactionAmount(t, accounts);
+        if (isIncome) res.income += getMyTransactionAmount(t, accounts);
       });
 
       return res;
@@ -189,7 +116,7 @@ export default function Stats() {
     const totalIncome = flowData.reduce((sum, d) => sum + d.income, 0);
 
     const filteredForAverages = getFiltered();
-    const periodAverages = computeFullPeriodAverages(filteredForAverages, now);
+    const periodAverages = computeFullPeriodAverages(filteredForAverages, now, accounts);
 
     // 3. Category Data
     const catFiltered = filteredForAverages.filter(t => !isInitialBalanceTx(t) && t.date >= startOfMonth(now).getTime() && t.date <= endOfMonth(now).getTime());
@@ -202,7 +129,7 @@ export default function Stats() {
     categories.forEach((cat, idx) => {
       const total = catFiltered
         .filter(t => t.categoryId === cat.id && (t.type === 'expense' || t.type === 'subscription'))
-        .reduce((sum, t) => sum + getMyTransactionAmount(t), 0);
+        .reduce((sum, t) => sum + getMyTransactionAmount(t, accounts), 0);
       
       const existingColor = cat.color || CHART_COLORS[idx % CHART_COLORS.length];
       const catAvg = periodAverages.categoryMonthlyAvg[cat.id] ?? null;
