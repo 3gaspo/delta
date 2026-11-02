@@ -221,7 +221,7 @@ export default function Accounts() {
                 setRecurringAddMode('subscription');
                 setIsAddingRecurring(true);
               }}
-              className="text-xs font-bold text-foreground/70 hover:text-foreground hover:underline flex items-center gap-1 cursor-pointer"
+              className="ui-compact-control text-xs font-bold text-foreground/70 hover:text-foreground hover:underline flex items-center gap-1 cursor-pointer"
             >
               <Plus size={14} /> Add Recurring
             </button>

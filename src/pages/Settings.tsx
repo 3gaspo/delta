@@ -1,3 +1,4 @@
+import { ActionButton } from '@3gaspo/app-ui/ActionButton';
 import { ValidatedForm } from '../components/ValidatedForm';
 import { SettingsSwitch } from '../components/SettingsSwitch';
 import { DialogActions } from '../components/Dialog';
@@ -188,11 +189,12 @@ export default function Settings() {
                 <button
                   key={c.code}
                   type="button"
+                  aria-pressed={isSelected}
                   onClick={() => updateSettings({ currency: c.code })}
                   className={cn(
-                    "flex flex-col items-center justify-center p-3 rounded-2xl border transition-all text-center cursor-pointer",
+                    "ui-option flex flex-col items-center justify-center p-3 rounded-2xl border transition-all text-center cursor-pointer",
                     isSelected
-                      ? "bg-ui-primary text-ui-primary-text border-transparent shadow-sm font-bold scale-[1.02]"
+                      ? "bg-ui-primary text-ui-primary-text border-transparent shadow-sm font-bold"
                       : "bg-ui-section border-ui-border hover:bg-black/10 dark:hover:bg-white/10 opacity-75 hover:opacity-100"
                   )}
                 >
@@ -352,15 +354,15 @@ export default function Settings() {
         <div className="space-y-4">
           <p className="text-sm opacity-60">This action is permanent.</p>
           <DialogActions>
-            <Button onClick={() => { resetData('history'); setIsResetModal(false); }} variant="secondary">
+            <ActionButton scope="delta-reset" busyLabel="Resetting…" onClick={async () => { await resetData('history'); setIsResetModal(false); }} className="ui-button ui-button-secondary">
               Clear History
-            </Button>
-            <Button onClick={() => { resetData('all'); setIsResetModal(false); }} variant="destructive">
+            </ActionButton>
+            <ActionButton scope="delta-reset" busyLabel="Resetting…" onClick={async () => { await resetData('all'); setIsResetModal(false); }} className="ui-button ui-button-danger">
               Reset All Data
-            </Button>
-            <Button onClick={() => setIsResetModal(false)} variant="ghost">
+            </ActionButton>
+            <ActionButton scope="delta-reset" onClick={() => setIsResetModal(false)} className="ui-button ui-button-ghost">
               Cancel
-            </Button>
+            </ActionButton>
           </DialogActions>
         </div>
       </Modal>
