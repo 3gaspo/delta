@@ -1,6 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import { ACTIONS } from '@3gaspo/app-ui/labels';
+import { ValidatedForm } from '../ValidatedForm';
+import React, { useState, useMemo, useId } from 'react';
 import { useData } from '../../providers/DataProvider';
 import { Transaction, RecurringTransaction, TransactionType, TransactionStatus, Category } from '../../types';
+import { DialogActions } from '../Dialog';
 import { Button, Input, Select } from '../ui/Base';
 import { 
   Calendar, Tag, CreditCard, Layers, AlignLeft, 
@@ -33,6 +36,7 @@ interface SubTransactionItem {
 }
 
 export function TransactionForm({ onClose, initialData, initialRecurringData, defaultMode, allowedModes }: TransactionFormProps) {
+  const formId = useId();
   const { 
     accounts, categories, tags, transactions, settings,
     addTransaction, updateTransaction, deleteTransaction,
@@ -580,9 +584,9 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <ValidatedForm id={formId} onSubmit={handleSubmit} className="space-y-6">
       {error && (
-        <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-2xl text-xs font-semibold">
+        <div role="alert" className="ui-error p-3 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-2xl text-xs font-semibold">
           {error}
         </div>
       )}
@@ -597,22 +601,29 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
       {activeModes.length > 1 && (
         <div 
           className={cn(
-            "grid bg-black/5 dark:bg-white/5 p-1.5 rounded-2xl gap-1.5",
+            "ui-tabs grid bg-ui-section p-1.5 rounded-2xl gap-1.5",
             activeModes.length === 2 ? "grid-cols-2" : 
             activeModes.length === 3 ? "grid-cols-3" : 
             activeModes.length === 4 ? "grid-cols-4" : "grid-cols-1"
           )} 
-          role="tablist"
+          role="tablist" aria-label="Transaction mode"
+          onKeyDown={(event: React.KeyboardEvent<HTMLDivElement>) => {
+            if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+            const tabs = Array.from(event.currentTarget.querySelectorAll('[role="tab"]')) as HTMLButtonElement[];
+            const index = tabs.indexOf(document.activeElement as HTMLButtonElement);
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowLeft' ? -1 : 1) + tabs.length) % tabs.length;
+            event.preventDefault(); tabs[next]?.focus(); tabs[next]?.click();
+          }}
         >
           {activeModes.includes('single') && (
             <button
               type="button"
               role="tab"
-              aria-selected={mode === 'single'}
+              aria-selected={mode === 'single'} tabIndex={mode === 'single' ? 0 : -1}
               title="Single Transaction"
               onClick={() => setMode('single')}
               className={cn(
-                "py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
+                "ui-tab py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
                 mode === 'single'
                   ? "bg-white dark:bg-black text-foreground shadow-sm ring-1 ring-black/5 dark:ring-white/10"
                   : "opacity-40 hover:opacity-100 text-foreground"
@@ -626,11 +637,11 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             <button
               type="button"
               role="tab"
-              aria-selected={mode === 'group'}
+              aria-selected={mode === 'group'} tabIndex={mode === 'group' ? 0 : -1}
               title="Group Transaction"
               onClick={() => setMode('group')}
               className={cn(
-                "py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
+                "ui-tab py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
                 mode === 'group'
                   ? "bg-purple-600 text-white shadow-sm"
                   : "opacity-40 hover:opacity-100 text-foreground"
@@ -644,11 +655,11 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             <button
               type="button"
               role="tab"
-              aria-selected={mode === 'transfer'}
+              aria-selected={mode === 'transfer'} tabIndex={mode === 'transfer' ? 0 : -1}
               title={isRecurringContext ? "Recurring Transfer" : "Account Transfer"}
               onClick={() => setMode('transfer')}
               className={cn(
-                "py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
+                "ui-tab py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
                 mode === 'transfer'
                   ? "bg-blue-600 text-white shadow-sm"
                   : "opacity-40 hover:opacity-100 text-foreground"
@@ -662,13 +673,13 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             <button
               type="button"
               role="tab"
-              aria-selected={mode === 'subscription'}
+              aria-selected={mode === 'subscription'} tabIndex={mode === 'subscription' ? 0 : -1}
               title="Recurring Transaction"
               onClick={() => {
                 setMode('subscription');
               }}
               className={cn(
-                "py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
+                "ui-tab py-3 px-2 rounded-xl transition-all flex items-center justify-center cursor-pointer",
                 mode === 'subscription'
                   ? "bg-amber-600 text-white shadow-sm"
                   : "opacity-40 hover:opacity-100 text-foreground"
@@ -682,7 +693,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
 
       {/* Active Tab Banner Title */}
       {mode === 'single' && (
-        <div className="flex items-center gap-3 p-3 bg-black/5 dark:bg-white/5 rounded-2xl">
+        <div className="flex items-center gap-3 p-3 bg-ui-section rounded-2xl">
           <div className="w-9 h-9 rounded-xl bg-white dark:bg-black/40 flex items-center justify-center shadow-xs shrink-0 text-foreground">
             <Receipt size={18} />
           </div>
@@ -725,19 +736,19 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
           <>
             {/* Type Selector (Expense in Red / Income in Green) */}
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
+              <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
                 Transaction Type
               </span>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, type: 'expense' })}
-                  className={cn(
+                  className={"ui-button " + (cn(
                     "py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border transition-all",
                     formData.type === 'expense'
                       ? "bg-red-500/15 border-red-500 text-red-600 dark:text-red-400 shadow-sm"
-                      : "bg-black/5 dark:bg-white/5 border-transparent text-foreground/50 hover:text-foreground"
-                  )}
+                      : "bg-ui-section border-transparent text-foreground/50 hover:text-foreground"
+                  ))}
                 >
                   <ArrowUpRight size={16} className={formData.type === 'expense' ? "text-red-500" : ""} />
                   <span>Expense</span>
@@ -746,12 +757,12 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 <button
                   type="button"
                   onClick={() => setFormData({ ...formData, type: 'income' })}
-                  className={cn(
+                  className={"ui-button " + (cn(
                     "py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border transition-all",
                     formData.type === 'income'
                       ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-sm"
-                      : "bg-black/5 dark:bg-white/5 border-transparent text-foreground/50 hover:text-foreground"
-                  )}
+                      : "bg-ui-section border-transparent text-foreground/50 hover:text-foreground"
+                  ))}
                 >
                   <ArrowDownLeft size={16} className={formData.type === 'income' ? "text-emerald-500" : ""} />
                   <span>Income</span>
@@ -760,8 +771,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             </div>
 
             {/* Name */}
-            <label className="block">
-              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
+            <label className="ui-field-label block">
+              <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
                 Name / Merchant
               </span>
               <Input 
@@ -775,8 +786,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             </label>
 
             {/* Amount */}
-            <label className="block">
-              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Amount</span>
+            <label className="ui-field-label block">
+              <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Amount</span>
               <Input 
                 placeholder="0.00" 
                 type="text" 
@@ -791,8 +802,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             </label>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Date</span>
+              <label className="ui-field-label block">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Date</span>
                 <Input 
                   type="date" 
                   icon={Calendar}
@@ -802,8 +813,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 />
               </label>
 
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Status</span>
+              <label className="ui-field-label block">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Status</span>
                 <Select 
                   value={formData.status}
                   onChange={e => setFormData({ ...formData, status: e.target.value as TransactionStatus })}
@@ -816,8 +827,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Account</span>
+              <label className="ui-field-label block">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Account</span>
                 <Select 
                   icon={CreditCard}
                   value={formData.accountId}
@@ -852,8 +863,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 </Select>
               </label>
 
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Category</span>
+              <label className="ui-field-label block">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Category</span>
                 <Select 
                   icon={Layers}
                   value={formData.categoryId}
@@ -924,7 +935,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
 
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 block mb-1">
+                    <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 block mb-1">
                       My Share (Personal Expense)
                     </span>
                     <Input
@@ -945,10 +956,10 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                     />
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 block mb-1">
+                    <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 block mb-1">
                       Others' Share
                     </span>
-                    <div className="h-10 px-3 flex items-center rounded-xl bg-black/5 dark:bg-white/5 font-semibold text-sm opacity-70">
+                    <div className="h-10 px-3 flex items-center rounded-xl bg-ui-section font-semibold text-sm opacity-70">
                       {formatCurrency(
                         Math.max(0, (parseMoney(formData.amount) || 0) - (parseMoney(myShareAmount) || 0)),
                         settings.currency
@@ -960,8 +971,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
               </div>
             )}
 
-            <label className="block">
-              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Link to Debt</span>
+            <label className="ui-field-label block">
+              <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Link to Debt</span>
               {debtAccounts.length > 0 ? (
                 <Select
                   icon={HandCoins}
@@ -980,8 +991,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
               )}
             </label>
 
-            <label className="block">
-              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Tags (comma separated)</span>
+            <label className="ui-field-label block">
+              <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Tags (comma separated)</span>
               <Input 
                 icon={Tag}
                 placeholder="Food, Leisure, Important..."
@@ -990,8 +1001,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
               />
             </label>
 
-            <label className="block">
-              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Additional Description (Optional)</span>
+            <label className="ui-field-label block">
+              <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Additional Description (Optional)</span>
               <Input 
                 icon={AlignLeft}
                 placeholder="Details about this transaction..."
@@ -1005,8 +1016,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
         {/* ======================= TAB 2: GROUP TRANSACTION ======================= */}
         {mode === 'group' && (
           <>
-            <label className="block">
-              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
+            <label className="ui-field-label block">
+              <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
                 Group Title / Shared Name
               </span>
               <Input 
@@ -1020,8 +1031,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             </label>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Date</span>
+              <label className="ui-field-label block">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Date</span>
                 <Input 
                   type="date" 
                   icon={Calendar}
@@ -1031,8 +1042,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 />
               </label>
 
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Status</span>
+              <label className="ui-field-label block">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Status</span>
                 <Select 
                   value={formData.status}
                   onChange={e => setFormData({ ...formData, status: e.target.value as TransactionStatus })}
@@ -1044,7 +1055,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
               </label>
             </div>
 
-            <div className="pt-2 border-t border-black/10 dark:border-white/10">
+            <div className="pt-2 border-t border-ui-ink/10">
               <div className="flex justify-end mb-4">
                 <div className="bg-purple-500/10 px-4 py-2 rounded-2xl border border-purple-500/20 flex items-center gap-3">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">Total Group Amount:</span>
@@ -1056,8 +1067,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
 
               <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
                 {subTransactions.map((st, idx) => (
-                  <div key={idx} className="p-4 bg-black/5 dark:bg-white/5 rounded-2xl border border-black/5 dark:border-white/5 space-y-3 relative group/item">
-                    <div className="flex items-center justify-between pb-1 border-b border-black/5 dark:border-white/5">
+                  <div key={idx} className="p-4 bg-ui-section rounded-2xl border border-ui-border space-y-3 relative group/item">
+                    <div className="flex items-center justify-between pb-1 border-b border-ui-border">
                       <span className="text-[10px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-600 dark:text-purple-300 px-2.5 py-1 rounded-md">
                         Sub-Transaction #{idx + 1}
                       </span>
@@ -1075,17 +1086,17 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
 
                     {/* Subtransaction Type Selector: Expense (Red) / Income (Green) */}
                     <div>
-                      <span className="text-[9px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Type</span>
+                      <span className="ui-section-title text-[9px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Type</span>
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
                           onClick={() => handleUpdateSubTransaction(idx, { type: 'expense' })}
-                          className={cn(
+                          className={"ui-button " + (cn(
                             "py-2 px-3 rounded-xl font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 border transition-all",
                             st.type === 'expense'
                               ? "bg-red-500/15 border-red-500 text-red-600 dark:text-red-400 shadow-sm"
-                              : "bg-black/5 dark:bg-white/5 border-transparent text-foreground/50 hover:text-foreground"
-                          )}
+                              : "bg-ui-section border-transparent text-foreground/50 hover:text-foreground"
+                          ))}
                         >
                           <ArrowUpRight size={14} className={st.type === 'expense' ? "text-red-500" : ""} />
                           <span>Expense</span>
@@ -1094,12 +1105,12 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                         <button
                           type="button"
                           onClick={() => handleUpdateSubTransaction(idx, { type: 'income' })}
-                          className={cn(
+                          className={"ui-button " + (cn(
                             "py-2 px-3 rounded-xl font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 border transition-all",
                             st.type === 'income'
                               ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-sm"
-                              : "bg-black/5 dark:bg-white/5 border-transparent text-foreground/50 hover:text-foreground"
-                          )}
+                              : "bg-ui-section border-transparent text-foreground/50 hover:text-foreground"
+                          ))}
                         >
                           <ArrowDownLeft size={14} className={st.type === 'income' ? "text-emerald-500" : ""} />
                           <span>Income</span>
@@ -1107,8 +1118,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                       </div>
                     </div>
 
-                    <label className="block">
-                      <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Amount</span>
+                    <label className="ui-field-label block">
+                      <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Amount</span>
                       <Input 
                         placeholder="0.00"
                         value={st.amount}
@@ -1130,8 +1141,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                       />
                     </label>
 
-                    <label className="block">
-                      <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">
+                    <label className="ui-field-label block">
+                      <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">
                         Account
                       </span>
                       <Select
@@ -1222,7 +1233,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                           })}
 
                           <div className="flex items-center gap-1 ml-auto">
-                            <span className="text-[9px] font-bold opacity-40 uppercase">My share:</span>
+                            <span className="ui-section-title text-[9px] font-bold opacity-40 uppercase">My share:</span>
                             <Input
                               placeholder="0.00"
                               value={st.myShareAmount ?? ''}
@@ -1242,8 +1253,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                       </div>
                     )}
 
-                    <label className="block">
-                      <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Category</span>
+                    <label className="ui-field-label block">
+                      <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Category</span>
                       <Select
                         icon={Layers}
                         value={st.categoryId}
@@ -1258,8 +1269,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                       </Select>
                     </label>
 
-                    <label className="block">
-                      <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Link to Debt</span>
+                    <label className="ui-field-label block">
+                      <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Link to Debt</span>
                       {debtAccounts.length > 0 ? (
                         <Select
                           icon={HandCoins}
@@ -1278,8 +1289,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                       )}
                     </label>
 
-                    <label className="block">
-                      <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Tags (comma separated)</span>
+                    <label className="ui-field-label block">
+                      <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Tags (comma separated)</span>
                       <Input 
                         icon={Tag}
                         placeholder="Food, Leisure..."
@@ -1288,8 +1299,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                       />
                     </label>
 
-                    <label className="block">
-                      <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Notes / Detail</span>
+                    <label className="ui-field-label block">
+                      <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Notes / Detail</span>
                       <Input 
                         icon={AlignLeft}
                         placeholder="Sub-item notes..."
@@ -1316,8 +1327,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
         {/* ======================= TAB 3: TRANSFER ======================= */}
         {mode === 'transfer' && (
           <>
-            <label className="block">
-              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
+            <label className="ui-field-label block">
+              <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
                 Transfer Title / Name
               </span>
               <Input 
@@ -1330,8 +1341,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
               />
             </label>
 
-            <label className="block">
-              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Transfer Amount</span>
+            <label className="ui-field-label block">
+              <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Transfer Amount</span>
               <Input 
                 placeholder="0.00" 
                 type="text" 
@@ -1343,8 +1354,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             </label>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">From Account (Source)</span>
+              <label className="ui-field-label block">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">From Account (Source)</span>
                 <Select 
                   icon={CreditCard}
                   value={formData.accountId}
@@ -1375,8 +1386,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 </Select>
               </label>
 
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">To Account (Destination)</span>
+              <label className="ui-field-label block">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">To Account (Destination)</span>
                 <Select 
                   icon={ArrowRightLeft}
                   value={formData.transferAccountId}
@@ -1415,8 +1426,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             {isRecurringContext ? (
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <label className="block">
-                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
+                  <label className="ui-field-label block">
+                    <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
                       Start Date
                     </span>
                     <Input 
@@ -1428,8 +1439,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                     />
                   </label>
 
-                  <label className="block">
-                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Recurring Period</span>
+                  <label className="ui-field-label block">
+                    <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Recurring Period</span>
                     <Select 
                       icon={Repeat}
                       value={transferPeriodicity}
@@ -1448,8 +1459,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 </div>
 
                 {transferPeriodicity === 'custom' && (
-                  <label className="block">
-                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Repeat Every (Days)</span>
+                  <label className="ui-field-label block">
+                    <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Repeat Every (Days)</span>
                     <Input 
                       type="number"
                       icon={Repeat}
@@ -1463,8 +1474,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 )}
               </>
             ) : (
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Date</span>
+              <label className="ui-field-label block">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Date</span>
                 <Input 
                   type="date" 
                   icon={Calendar}
@@ -1476,8 +1487,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Status</span>
+              <label className="ui-field-label block">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Status</span>
                 <Select 
                   value={formData.status}
                   onChange={e => setFormData({ ...formData, status: e.target.value as TransactionStatus })}
@@ -1488,8 +1499,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 </Select>
               </label>
 
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Tags (comma separated)</span>
+              <label className="ui-field-label block">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Tags (comma separated)</span>
                 <Input 
                   icon={Tag}
                   placeholder="Savings, Transfer, Internal..."
@@ -1499,8 +1510,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
               </label>
             </div>
 
-            <label className="block">
-              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Notes / Description (Optional)</span>
+            <label className="ui-field-label block">
+              <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Notes / Description (Optional)</span>
               <Input 
                 icon={AlignLeft}
                 placeholder="Details about this transfer..."
@@ -1516,19 +1527,19 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
           <>
             {/* Recurring Type Selector: Expense (Subscription) vs Recurring Income */}
             <div>
-              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
+              <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
                 Subscription Flow
               </span>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => setSubscriptionType('expense')}
-                  className={cn(
+                  className={"ui-button " + (cn(
                     "py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border transition-all",
                     subscriptionType === 'expense'
                       ? "bg-red-500/15 border-red-500 text-red-600 dark:text-red-400 shadow-sm"
-                      : "bg-black/5 dark:bg-white/5 border-transparent text-foreground/50 hover:text-foreground"
-                  )}
+                      : "bg-ui-section border-transparent text-foreground/50 hover:text-foreground"
+                  ))}
                 >
                   <ArrowUpRight size={16} className={subscriptionType === 'expense' ? "text-red-500" : ""} />
                   <span>Recurring Expense</span>
@@ -1537,12 +1548,12 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 <button
                   type="button"
                   onClick={() => setSubscriptionType('income')}
-                  className={cn(
+                  className={"ui-button " + (cn(
                     "py-3 px-4 rounded-2xl font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2 border transition-all",
                     subscriptionType === 'income'
                       ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-sm"
-                      : "bg-black/5 dark:bg-white/5 border-transparent text-foreground/50 hover:text-foreground"
-                  )}
+                      : "bg-ui-section border-transparent text-foreground/50 hover:text-foreground"
+                  ))}
                 >
                   <ArrowDownLeft size={16} className={subscriptionType === 'income' ? "text-emerald-500" : ""} />
                   <span>Recurring Income</span>
@@ -1550,8 +1561,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
               </div>
             </div>
 
-            <label className="block">
-              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
+            <label className="ui-field-label block">
+              <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
                 {subscriptionType === 'expense' ? 'Subscription / Recurring Expense Name' : 'Recurring Income Name'}
               </span>
               <Input 
@@ -1564,8 +1575,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
               />
             </label>
 
-            <label className="block">
-              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Recurring Amount</span>
+            <label className="ui-field-label block">
+              <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Recurring Amount</span>
               <Input 
                 placeholder="0.00" 
                 type="text" 
@@ -1580,8 +1591,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             </label>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
+              <label className="ui-field-label block">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
                   Start Date
                 </span>
                 <Input
@@ -1593,8 +1604,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 />
               </label>
 
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Recurring Period</span>
+              <label className="ui-field-label block">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Recurring Period</span>
                 <Select 
                   icon={Repeat}
                   value={periodicity}
@@ -1611,8 +1622,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             </div>
 
             {periodicity === 'custom' && (
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Repeat Every (Days)</span>
+              <label className="ui-field-label block">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Repeat Every (Days)</span>
                 <Input 
                   type="number"
                   icon={Repeat}
@@ -1626,8 +1637,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Account</span>
+              <label className="ui-field-label block">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Account</span>
                 <Select 
                   icon={CreditCard}
                   value={formData.accountId}
@@ -1643,8 +1654,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 </Select>
               </label>
 
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Category</span>
+              <label className="ui-field-label block">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Category</span>
                 <Select 
                   icon={Layers}
                   value={formData.categoryId}
@@ -1715,7 +1726,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
 
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 block mb-1">
+                    <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 block mb-1">
                       My Share (Monthly Expected)
                     </span>
                     <Input
@@ -1736,10 +1747,10 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                     />
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 block mb-1">
+                    <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 block mb-1">
                       Others' Share
                     </span>
-                    <div className="h-10 px-3 flex items-center rounded-xl bg-black/5 dark:bg-white/5 font-semibold text-sm opacity-70">
+                    <div className="h-10 px-3 flex items-center rounded-xl bg-ui-section font-semibold text-sm opacity-70">
                       {formatCurrency(
                         Math.max(0, (parseMoney(formData.amount) || 0) - (parseMoney(myShareAmount) || 0)),
                         settings.currency
@@ -1752,8 +1763,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Status</span>
+              <label className="ui-field-label block">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Status</span>
                 <Select 
                   value={formData.status}
                   onChange={e => setFormData({ ...formData, status: e.target.value as TransactionStatus })}
@@ -1764,8 +1775,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 </Select>
               </label>
 
-              <label className="block">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Tags (comma separated)</span>
+              <label className="ui-field-label block">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Tags (comma separated)</span>
                 <Input 
                   icon={Tag}
                   placeholder="Subscription, Fixed, Essential..."
@@ -1775,8 +1786,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
               </label>
             </div>
 
-            <label className="block">
-              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Additional Description (Optional)</span>
+            <label className="ui-field-label block">
+              <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Additional Description (Optional)</span>
               <Input 
                 icon={AlignLeft}
                 placeholder="Billing notes, renewal info..."
@@ -1788,19 +1799,9 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
         )}
       </div>
 
-      <Button type="submit" disabled={loading} className="w-full">
-        {loading 
-          ? 'Saving...' 
-          : mode === 'group' 
-            ? 'Save Group Transaction' 
-            : mode === 'transfer'
-              ? (isRecurringContext
-                  ? (initialRecurringData ? 'Update Recurring Transfer' : 'Create Recurring Transfer')
-                  : (initialData ? 'Update Transfer' : 'Execute Transfer'))
-              : mode === 'subscription'
-                ? (initialRecurringData ? 'Update Recurring Rule' : 'Create Recurring Rule')
-                : (initialData ? 'Update Transaction' : 'Record Transaction')}
-      </Button>
-    </form>
+      <DialogActions form={formId} cancel><Button type="submit" disabled={loading} className="w-full">
+        {loading ? ACTIONS.saving : mode === 'transfer' && !isRecurringContext ? 'Transfer' : ACTIONS.save}
+      </Button></DialogActions>
+    </ValidatedForm>
   );
 }

@@ -20,26 +20,25 @@ export function Button({
   const effectiveVariant = ghost ? 'ghost' : (variant === 'danger' ? 'destructive' : variant);
 
   const variants: Record<string, string> = {
-    primary: "bg-black text-white dark:bg-white dark:text-black",
-    secondary: "bg-black/5 text-black dark:bg-white/5 dark:text-white",
+    primary: "ui-button-primary bg-ui-primary text-ui-primary-text",
+    secondary: "ui-button-secondary bg-black/5 text-black dark:bg-white/5 dark:text-white",
     destructive: "bg-red-500 text-white hover:bg-red-600",
     danger: "bg-red-500 text-white hover:bg-red-600",
-    ghost: "bg-transparent hover:bg-black/5 dark:hover:bg-white/5 text-foreground",
-    outline: "bg-transparent border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/5 text-foreground"
+    ghost: "ui-button-ghost bg-transparent hover:bg-black/5 dark:hover:bg-white/5 text-foreground",
+    outline: "bg-transparent border border-ui-ink/10 hover:bg-black/5 dark:hover:bg-white/5 text-foreground"
   };
 
   const sizes: Record<string, string> = {
     sm: "px-4 py-2 text-sm rounded-xl",
     md: "px-6 py-3 font-medium rounded-2xl",
     lg: "px-8 py-4 text-lg font-bold rounded-3xl",
-    icon: "p-3 rounded-2xl"
+    icon: "ui-icon-button p-3 rounded-2xl"
   };
 
   return (
     <motion.button
-      whileTap={{ scale: 0.98 }}
       className={cn(
-        "inline-flex items-center justify-center transition-colors disabled:opacity-50 disabled:pointer-events-none cursor-pointer",
+        "ui-button inline-flex items-center justify-center transition-colors disabled:opacity-50 disabled:pointer-events-none cursor-pointer",
         variants[effectiveVariant] || variants.primary,
         sizes[size] || sizes.md,
         className
@@ -60,11 +59,11 @@ interface CardProps {
 
 export function Card({ children, className, label, actions }: CardProps) {
   return (
-    <section className="bg-black/5 dark:bg-white/5 p-6 rounded-[32px] mb-6 last:mb-0">
+    <section className="ui-section-card bg-ui-section p-6 rounded-[32px] mb-6 last:mb-0">
       {(label || actions) && (
         <div className="flex items-center justify-between mb-4 px-2">
           {label ? (
-            <span className="block text-[10px] font-bold uppercase tracking-[0.2em] opacity-40">
+            <span className="ui-section-title block text-[10px] font-bold uppercase tracking-[0.2em] opacity-40">
               {label}
             </span>
           ) : <div />}
@@ -73,7 +72,7 @@ export function Card({ children, className, label, actions }: CardProps) {
           )}
         </div>
       )}
-      <div className={cn("bg-white dark:bg-black/20 rounded-2xl shadow-sm", className)}>
+      <div className={cn("bg-ui-surface rounded-2xl shadow-sm", className)}>
         {children}
       </div>
     </section>
@@ -89,11 +88,11 @@ export function Input({ className, icon: Icon, ...props }: React.InputHTMLAttrib
         </div>
       )}
       <input
-        className={cn(
-          "w-full bg-black/5 dark:bg-white/10 border-0 rounded-2xl px-4 py-4 focus:ring-2 focus:ring-black dark:focus:ring-white transition-all outline-none text-foreground placeholder:text-foreground/30",
-          Icon && "pl-12",
+        className={"ui-field " + (cn(
+          "w-full bg-ui-section border-0 rounded-2xl px-4 py-4 focus:ring-2 focus:ring-black dark:focus:ring-white transition-all outline-none text-foreground placeholder:text-foreground/30",
+          Icon && "ui-field-leading pl-12",
           className
-        )}
+        ))}
         {...props}
       />
     </div>
@@ -196,6 +195,7 @@ export function Select({
   const handleSelect = (opt: ParsedOptionItem) => {
     if (opt.disabled) return;
     setIsOpen(false);
+    requestAnimationFrame(() => containerRef.current?.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')?.focus({ preventScroll: true }));
 
     if (onChange) {
       onChange({
@@ -208,7 +208,24 @@ export function Select({
   };
 
   return (
-    <div ref={containerRef} className={cn("relative w-full", isOpen && "z-50")}>
+    <div ref={containerRef} className={cn("relative w-full", isOpen && "z-50")}
+      onKeyDown={event => {
+        if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+          if (!isOpen && !['ArrowDown', 'ArrowUp'].includes(event.key)) return;
+          event.preventDefault();
+          const options = Array.from(containerRef.current?.querySelectorAll<HTMLButtonElement>('button[role="option"]:not(:disabled)') ?? []) as HTMLButtonElement[];
+          if (!isOpen) { setIsOpen(true); requestAnimationFrame(() => containerRef.current?.querySelector<HTMLButtonElement>('button[role="option"]:not(:disabled)')?.focus()); return; }
+          const index = options.indexOf(document.activeElement as HTMLButtonElement);
+          const next = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1 : (index + (event.key === 'ArrowUp' ? -1 : 1) + options.length) % options.length;
+          options[next]?.focus();
+        }
+        if (event.key === 'Escape' && isOpen) {
+          event.preventDefault();
+          event.stopPropagation();
+          setIsOpen(false);
+          containerRef.current?.querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')?.focus();
+        }
+      }}>
       {/* Hidden standard input for form integration */}
       <input type="hidden" name={name} value={currentValue} required={required} />
 
@@ -222,15 +239,15 @@ export function Select({
         onClick={() => setIsOpen(prev => !prev)}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
-        className={cn(
+        className={"ui-select-trigger " + (cn(
           "w-full flex items-center justify-between text-left",
-          "bg-black/5 dark:bg-white/10 hover:bg-black/[0.08] dark:hover:bg-white/[0.14] border border-black/5 dark:border-white/5",
+          "bg-ui-section hover:bg-black/[0.08] dark:hover:bg-white/[0.14] border border-ui-border",
           "rounded-2xl px-4 py-3.5 focus:ring-2 focus:ring-black dark:focus:ring-white transition-all outline-none",
           "text-foreground font-medium text-sm tracking-tight cursor-pointer",
           disabled && "opacity-40 cursor-not-allowed pointer-events-none",
           isOpen && "ring-2 ring-black/10 dark:ring-white/20",
           className
-        )}
+        ))}
       >
         <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
           {Icon && (
@@ -260,11 +277,11 @@ export function Select({
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ duration: 0.15, ease: "easeOut" }}
             role="listbox"
-            className={cn(
+            className={"ui-menu " + (cn(
               "absolute left-0 right-0 top-full mt-2 z-[150]",
-              "bg-white/95 dark:bg-neutral-900/95 backdrop-blur-xl border border-black/10 dark:border-white/10 shadow-2xl",
+              "bg-ui-overlay backdrop-blur-xl border border-ui-ink/10 shadow-2xl",
               "rounded-2xl p-1.5 max-h-60 overflow-y-auto custom-scrollbar"
-            )}
+            ))}
           >
             {parsedOptions.length === 0 ? (
               <div className="px-3 py-2 text-xs opacity-50 text-center font-medium">
@@ -282,9 +299,9 @@ export function Select({
                     disabled={opt.disabled}
                     onClick={() => handleSelect(opt)}
                     className={cn(
-                      "w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-between gap-2 cursor-pointer",
+                      "ui-menu-item w-full text-left px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center justify-between gap-2 cursor-pointer",
                       isSelected
-                        ? "bg-black/5 dark:bg-white/10 text-foreground font-bold shadow-xs"
+                        ? "bg-ui-section text-foreground font-bold shadow-xs"
                         : "text-foreground/80 hover:bg-black/5 dark:hover:bg-white/5 hover:text-foreground",
                       opt.disabled && "opacity-35 cursor-not-allowed hover:bg-transparent pointer-events-none"
                     )}

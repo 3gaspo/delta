@@ -1,3 +1,4 @@
+import { formatDate, formatPercent } from '@3gaspo/app-ui/formats';
 import React, { useMemo } from 'react';
 import { Account } from '../../types';
 import { useData } from '../../providers/DataProvider';
@@ -41,26 +42,26 @@ export function AccountCard({ account, onClick, onEdit, onDelete }: AccountCardP
     <div
       onClick={onClick || onEdit}
       className={cn(
-        "w-full p-4 sm:p-5 flex items-center justify-between gap-4 transition-all hover:bg-black/[0.02] dark:hover:bg-white/[0.02] cursor-pointer group",
+        "account-row w-full transition-all hover:bg-black/[0.02] dark:hover:bg-white/[0.02] cursor-pointer group",
         account.archived && "opacity-40",
         account.hidden && "opacity-60 bg-black/[0.02] dark:bg-white/[0.02]"
       )}
     >
-      <div className="flex items-center gap-3.5 min-w-0 flex-1">
+      <div className="account-main">
         <div className={cn(
           "w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-xs",
           isDebt 
             ? (isReceivable ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500")
-            : "bg-black/5 dark:bg-white/10 text-foreground"
+            : "bg-ui-section text-foreground"
         )}>
           {isDebt 
             ? (isReceivable ? <TrendingUp size={20} /> : <TrendingDown size={20} />)
             : <Landmark size={20} />}
         </div>
 
-        <div className="min-w-0 flex-1">
+        <div className="account-copy">
           <div className="flex items-center gap-2 flex-wrap mb-0.5">
-            <h4 className="font-bold text-base text-foreground leading-tight truncate">
+            <h4 title={account.name} className="font-bold text-base text-foreground leading-tight truncate">
               {account.name}
             </h4>
             {account.isShared && (
@@ -73,12 +74,12 @@ export function AccountCard({ account, onClick, onEdit, onDelete }: AccountCardP
                 className="text-[9px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 px-2 py-0.5 rounded-full uppercase flex items-center gap-1 shrink-0"
                 title={cashflowAlert.isNegativeNow 
                   ? 'Account is currently below 0' 
-                  : `Projected to drop below 0 on ${new Date(cashflowAlert.firstNegativeDate!).toLocaleDateString([], { month: 'short', day: 'numeric' })}`}
+                  : `Projected to drop below 0 on ${formatDate(cashflowAlert.firstNegativeDate!, 'compact')}`}
               >
                 <AlertTriangle size={10} />
                 {cashflowAlert.isNegativeNow 
                   ? 'Below 0' 
-                  : `Below 0 on ${new Date(cashflowAlert.firstNegativeDate!).toLocaleDateString([], { month: 'short', day: 'numeric' })}`}
+                  : `Below 0 on ${formatDate(cashflowAlert.firstNegativeDate!, 'compact')}`}
               </span>
             )}
             {account.hidden && (
@@ -87,7 +88,7 @@ export function AccountCard({ account, onClick, onEdit, onDelete }: AccountCardP
               </span>
             )}
             {account.archived && (
-              <span className="text-[9px] font-bold bg-black/10 dark:bg-white/10 px-2 py-0.5 rounded-full uppercase shrink-0">
+              <span className="text-[9px] font-bold bg-ui-ink/10 px-2 py-0.5 rounded-full uppercase shrink-0">
                 Archived
               </span>
             )}
@@ -96,13 +97,13 @@ export function AccountCard({ account, onClick, onEdit, onDelete }: AccountCardP
             {isDebt 
               ? (isReceivable ? 'Receivable' : 'Payable') 
               : (account.isShared 
-                  ? `${Math.round((account.defaultMyShareRatio ?? 0.5) * 100)}% My Share`
+                  ? `${formatPercent(account.defaultMyShareRatio ?? 0.5)} My Share`
                   : 'Regular Account')}
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 sm:gap-4 shrink-0 text-right">
+      <div className="account-trailing">
         <div>
           <p className={cn(
             "text-lg sm:text-xl font-bold tracking-tight",
@@ -118,11 +119,11 @@ export function AccountCard({ account, onClick, onEdit, onDelete }: AccountCardP
           )}
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="account-actions flex items-center">
           <button
             type="button"
             onClick={handleEdit}
-            className="w-8 h-8 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-foreground/70 hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
+            className="ui-icon-button ui-row-action bg-ui-section hover:bg-black/10 dark:hover:bg-white/20 text-foreground/70 hover:text-foreground transition-colors cursor-pointer"
             title={`Edit ${account.name}`}
             aria-label={`Edit ${account.name}`}
           >
@@ -131,7 +132,7 @@ export function AccountCard({ account, onClick, onEdit, onDelete }: AccountCardP
           <button
             type="button"
             onClick={handleDelete}
-            className="w-8 h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors cursor-pointer"
+            className="ui-icon-button ui-row-action bg-red-500/10 hover:bg-red-500/20 text-red-500 transition-colors cursor-pointer"
             title={`Delete ${account.name}`}
             aria-label={`Delete ${account.name}`}
           >
@@ -145,8 +146,8 @@ export function AccountCard({ account, onClick, onEdit, onDelete }: AccountCardP
 
 export function TotalCard({ label, amount, currency, icon: Icon, colorClass }: { label: string, amount: number, currency: string, icon: any, colorClass?: string }) {
   return (
-    <div className="bg-black/5 dark:bg-white/5 p-6 rounded-[32px] flex flex-col gap-4">
-      <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center bg-white dark:bg-black/20", colorClass)}>
+    <div className="ui-section-card bg-ui-section p-6 rounded-[32px] flex flex-col gap-4">
+      <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center bg-ui-surface", colorClass)}>
         <Icon size={18} />
       </div>
       <div>

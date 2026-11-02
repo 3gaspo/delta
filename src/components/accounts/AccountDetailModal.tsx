@@ -56,14 +56,14 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
             ? (isReceivable 
                 ? "bg-emerald-500/5 border-emerald-500/15 text-emerald-950 dark:text-emerald-50" 
                 : "bg-red-500/5 border-red-500/15 text-red-950 dark:text-red-50")
-            : "bg-black/[0.03] dark:bg-white/[0.03] border-black/5 dark:border-white/5"
+            : "bg-black/[0.03] dark:bg-white/[0.03] border-ui-border"
         )}>
           <div className="flex items-center gap-3">
             <div className={cn(
               "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-xs",
               isDebt 
                 ? (isReceivable ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-red-500/15 text-red-600 dark:text-red-400")
-                : "bg-black/10 dark:bg-white/10 text-foreground"
+                : "bg-ui-ink/10 text-foreground"
             )}>
               {isDebt 
                 ? (isReceivable ? <TrendingUp size={24} /> : <TrendingDown size={24} />)
@@ -78,7 +78,7 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
                       : "bg-red-500/20 text-red-700 dark:text-red-300")
                   : (account.isShared
                       ? "bg-sky-500/20 text-sky-700 dark:text-sky-300"
-                      : "bg-black/10 dark:bg-white/10 text-foreground/80")
+                      : "bg-ui-ink/10 text-foreground/80")
               )}>
                 {isDebt 
                   ? (isReceivable ? 'Receivable (Owed to you)' : 'Payable (You owe)') 
@@ -117,7 +117,7 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
         )}
 
         {/* Tab Toggle: Past Activity vs. Projected Cashflow Sequence */}
-        <div className="grid grid-cols-2 p-1 bg-black/5 dark:bg-white/5 rounded-2xl gap-1">
+        <div className="grid grid-cols-2 p-1 bg-ui-section rounded-2xl gap-1">
           <button
             type="button"
             onClick={() => setActiveTab('activity')}
@@ -154,7 +154,7 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
         {activeTab === 'activity' && (
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h4 className="text-[10px] font-black uppercase tracking-wider opacity-40">
+              <h4 className="ui-section-title text-[10px] font-black uppercase tracking-wider opacity-40">
                 Account Activity ({relevantTransactions.length})
               </h4>
               {account.initialBalance !== undefined && account.initialBalance !== 0 && (
@@ -164,7 +164,7 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
               )}
             </div>
 
-            <div className="bg-black/[0.02] dark:bg-white/[0.02] rounded-2xl border border-black/5 dark:border-white/5 divide-y divide-black/5 dark:divide-white/5 max-h-[340px] overflow-y-auto">
+            <div className="bg-black/[0.02] dark:bg-white/[0.02] rounded-2xl border border-ui-border divide-y divide-black/5 dark:divide-white/5 max-h-[340px] overflow-y-auto">
               {relevantTransactions.length === 0 ? (
                 <div className="p-8 text-center text-xs opacity-40">
                   <p>No transactions recorded yet for {account.name}.</p>
@@ -228,7 +228,7 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
                             </span>
                           )}
                           {tx.groupId && (
-                            <span className="text-[9px] font-black uppercase tracking-wider bg-black/5 dark:bg-white/10 opacity-70 px-1.5 py-0.2 rounded shrink-0">
+                            <span className="text-[9px] font-black uppercase tracking-wider bg-ui-section opacity-70 px-1.5 py-0.2 rounded shrink-0">
                               Group
                             </span>
                           )}
@@ -263,7 +263,7 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
         {activeTab === 'cashflow' && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <h4 className="text-[10px] font-black uppercase tracking-wider opacity-40">
+              <h4 className="ui-section-title text-[10px] font-black uppercase tracking-wider opacity-40">
                 Sequential Cashflow Projection (Next 60 Days)
               </h4>
               <span className="text-[10px] opacity-50 font-medium">
@@ -271,7 +271,7 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
               </span>
             </div>
 
-            <div className="bg-black/[0.02] dark:bg-white/[0.02] rounded-2xl border border-black/5 dark:border-white/5 divide-y divide-black/5 dark:divide-white/5 max-h-[340px] overflow-y-auto">
+            <div className="bg-black/[0.02] dark:bg-white/[0.02] rounded-2xl border border-ui-border divide-y divide-black/5 dark:divide-white/5 max-h-[340px] overflow-y-auto">
               {!cashflowAlert || cashflowAlert.sequence.length === 0 ? (
                 <div className="p-8 text-center text-xs opacity-40">
                   <p>No upcoming transactions or recurring rules projected for {account.name} in the next 60 days.</p>
@@ -293,7 +293,7 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
                             {step.name}
                           </span>
                           {step.isRecurring && (
-                            <span className="text-[8px] font-black uppercase tracking-wider bg-black/5 dark:bg-white/10 opacity-70 px-1.5 py-0.2 rounded shrink-0 flex items-center gap-0.5">
+                            <span className="text-[8px] font-black uppercase tracking-wider bg-ui-section opacity-70 px-1.5 py-0.2 rounded shrink-0 flex items-center gap-0.5">
                               <Repeat size={9} /> Recurring
                             </span>
                           )}
@@ -336,13 +336,13 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
 
             {/* Projection Summary Shelf */}
             {cashflowAlert && cashflowAlert.sequence.length > 0 && (
-              <div className="p-3 bg-black/5 dark:bg-white/5 rounded-2xl grid grid-cols-2 sm:grid-cols-3 gap-2 text-center text-xs">
+              <div className="p-3 bg-ui-section rounded-2xl grid grid-cols-2 sm:grid-cols-3 gap-2 text-center text-xs">
                 <div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider opacity-40 block">Current</span>
+                  <span className="ui-section-title text-[9px] font-bold uppercase tracking-wider opacity-40 block">Current</span>
                   <span className="font-bold">{formatCurrency(cashflowAlert.currentBalance, settings.currency)}</span>
                 </div>
                 <div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider opacity-40 block">Lowest Point</span>
+                  <span className="ui-section-title text-[9px] font-bold uppercase tracking-wider opacity-40 block">Lowest Point</span>
                   <span className={cn(
                     "font-bold",
                     cashflowAlert.lowestBalance < 0 ? "text-red-500" : "text-foreground"
@@ -351,7 +351,7 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
                   </span>
                 </div>
                 <div className="col-span-2 sm:col-span-1">
-                  <span className="text-[9px] font-bold uppercase tracking-wider opacity-40 block">Lowest Date</span>
+                  <span className="ui-section-title text-[9px] font-bold uppercase tracking-wider opacity-40 block">Lowest Date</span>
                   <span className="font-medium text-[11px] opacity-70">
                     {formatDate(cashflowAlert.lowestBalanceDate)}
                   </span>
@@ -364,7 +364,7 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
 
       {/* Edit Account Modal */}
       {isEditingAccount && (
-        <Modal isOpen={isEditingAccount} onClose={() => setIsEditingAccount(false)} title="Edit Account">
+        <Modal isOpen={isEditingAccount} onClose={() => setIsEditingAccount(false)} title="Edit account">
           <AccountForm onClose={() => setIsEditingAccount(false)} initialData={account} />
         </Modal>
       )}

@@ -1,3 +1,4 @@
+import { DialogActions } from '../Dialog';
 import React, { useState, useEffect } from 'react';
 import { useData } from '../../providers/DataProvider';
 import { Account } from '../../types';
@@ -133,7 +134,7 @@ export function AccountReorderModal({ isOpen, onClose }: AccountReorderModalProp
           setDragOverItemId(null);
         }}
         className={cn(
-          "flex items-center gap-3 p-3.5 rounded-2xl bg-black/[0.03] dark:bg-white/[0.04] border border-black/5 dark:border-white/5 transition-all duration-150",
+          "flex items-center gap-3 p-3.5 rounded-2xl bg-black/[0.03] dark:bg-white/[0.04] border border-ui-border transition-all duration-150",
           isDragging && "opacity-40 scale-95 border-dashed border-primary",
           isDragOver && "border-primary bg-primary/5 dark:bg-primary/10 shadow-xs",
           account.hidden && "opacity-60"
@@ -180,12 +181,12 @@ export function AccountReorderModal({ isOpen, onClose }: AccountReorderModalProp
             type="button"
             onClick={() => moveItem(index, index - 1, listType)}
             disabled={index === 0}
-            className={cn(
+            className={"ui-icon-button " + (cn(
               "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
               index === 0
                 ? "opacity-20 cursor-not-allowed text-foreground/30"
-                : "bg-white dark:bg-black/40 text-foreground hover:bg-black/10 dark:hover:bg-white/10 shadow-xs active:scale-95"
-            )}
+                : "bg-white dark:bg-black/40 text-foreground hover:bg-black/10 dark:hover:bg-white/10 shadow-xs "
+            ))}
             title="Move up"
           >
             <ChevronUp size={16} />
@@ -194,12 +195,12 @@ export function AccountReorderModal({ isOpen, onClose }: AccountReorderModalProp
             type="button"
             onClick={() => moveItem(index, index + 1, listType)}
             disabled={index === totalCount - 1}
-            className={cn(
+            className={"ui-icon-button " + (cn(
               "w-8 h-8 rounded-xl flex items-center justify-center transition-colors",
               index === totalCount - 1
                 ? "opacity-20 cursor-not-allowed text-foreground/30"
-                : "bg-white dark:bg-black/40 text-foreground hover:bg-black/10 dark:hover:bg-white/10 shadow-xs active:scale-95"
-            )}
+                : "bg-white dark:bg-black/40 text-foreground hover:bg-black/10 dark:hover:bg-white/10 shadow-xs "
+            ))}
             title="Move down"
           >
             <ChevronDown size={16} />
@@ -213,7 +214,7 @@ export function AccountReorderModal({ isOpen, onClose }: AccountReorderModalProp
   const hasDebts = debtList.length > 0;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Reorder Accounts">
+    <Modal isOpen={isOpen} onClose={onClose} title="Reorder accounts">
       <div className="flex flex-col gap-6">
         <p className="text-xs text-foreground/60 leading-relaxed -mt-2">
           Use the arrow buttons or drag and drop items to reorder your accounts. Click <strong>Validate</strong> to apply the new order.
@@ -221,7 +222,7 @@ export function AccountReorderModal({ isOpen, onClose }: AccountReorderModalProp
 
         {/* Section Tabs (if both types exist) */}
         {hasRegular && hasDebts && (
-          <div className="flex items-center gap-1.5 p-1 bg-black/5 dark:bg-white/5 rounded-2xl">
+          <div className="flex items-center gap-1.5 p-1 bg-ui-section rounded-2xl">
             <button
               type="button"
               onClick={() => setActiveTab('all')}
@@ -276,7 +277,7 @@ export function AccountReorderModal({ isOpen, onClose }: AccountReorderModalProp
                   renderAccountRow(account, index, regularList.length, 'regular')
                 )}
                 {regularList.length === 0 && (
-                  <div className="p-4 text-center text-xs font-semibold text-foreground/40 bg-black/5 dark:bg-white/5 rounded-2xl">
+                  <div className="p-4 text-center text-xs font-semibold text-foreground/40 bg-ui-section rounded-2xl">
                     No regular accounts
                   </div>
                 )}
@@ -297,7 +298,7 @@ export function AccountReorderModal({ isOpen, onClose }: AccountReorderModalProp
                   renderAccountRow(account, index, debtList.length, 'debt')
                 )}
                 {debtList.length === 0 && (
-                  <div className="p-4 text-center text-xs font-semibold text-foreground/40 bg-black/5 dark:bg-white/5 rounded-2xl">
+                  <div className="p-4 text-center text-xs font-semibold text-foreground/40 bg-ui-section rounded-2xl">
                     No debt accounts
                   </div>
                 )}
@@ -307,7 +308,7 @@ export function AccountReorderModal({ isOpen, onClose }: AccountReorderModalProp
         </div>
 
         {/* Footer Actions */}
-        <div className="flex items-center gap-3 pt-3 border-t border-black/5 dark:border-white/5">
+        <DialogActions>
           <Button
             type="button"
             variant="outline"
@@ -335,10 +336,10 @@ export function AccountReorderModal({ isOpen, onClose }: AccountReorderModalProp
               className="inline-flex items-center gap-1.5 text-xs font-bold px-5"
             >
               <Check size={16} />
-              {isSaving ? 'Saving...' : 'Validate'}
+              {isSaving ? 'Saving…' : 'Save'}
             </Button>
           </div>
-        </div>
+        </DialogActions>
       </div>
     </Modal>
   );

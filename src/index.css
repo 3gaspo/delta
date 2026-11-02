@@ -1,5 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
+@import "./styles/theme.css";
+@import "./styles/navigation.css";
+@import "./styles/dialogs.css";
+@import "./styles/components.css";
+@import "./styles/patterns.css";
+@import "./styles/forms.css";
+@import "./styles/tools.css";
+@import "./styles/rows.css";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -8,19 +16,19 @@
   --color-card: var(--card);
 }
 
-@variant dark (&:where(.dark, .dark *));
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --background: #ffffff;
-  --foreground: #000000;
-  --card: #ffffff;
+  --background: var(--ui-page);
+  --foreground: var(--ui-text);
+  --card: var(--ui-surface);
   color-scheme: light;
 }
 
 .dark {
-  --background: #000000;
-  --foreground: #ffffff;
-  --card: #18181b;
+  --background: var(--ui-page);
+  --foreground: var(--ui-text);
+  --card: var(--ui-surface);
   color-scheme: dark;
 }
 
@@ -52,3 +60,5 @@
 .inset-safe-top {
   top: env(safe-area-inset-top);
 }
+
+@source "../node_modules/@3gaspo/app-ui/src";

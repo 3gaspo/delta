@@ -1,3 +1,6 @@
+import { ValidatedForm } from '../components/ValidatedForm';
+import { SettingsSwitch } from '../components/SettingsSwitch';
+import { DialogActions } from '../components/Dialog';
 import React, { useState } from 'react';
 import { useAuth } from '../providers/AuthProvider';
 import { useData } from '../providers/DataProvider';
@@ -31,7 +34,7 @@ export default function Settings() {
     addTag, updateTag, deleteTag,
     resetData, transactions, accounts
   } = useData();
-  const { isDark, toggleTheme } = useTheme();
+  const { isDark, toggleTheme, error: themeError } = useTheme();
 
   const [isResetModal, setIsResetModal] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -74,14 +77,8 @@ export default function Settings() {
   };
 
   return (
-    <PageContainer title="Settings">
-      {settings.initialized === false && !isFirebase && (
-        <div className="mb-6 p-4 bg-emerald-500/10 text-emerald-500 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2">
-          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-          Dev Mode Active
-        </div>
-      )}
-
+    <PageContainer title="Settings" devMode={!isFirebase}>
+      {themeError && <p role="alert" className="ui-error text-red-600 text-sm mb-4">{themeError}</p>}
       {/* App Specific Settings */}
       <Card label="Categories">
         <div className="p-4 space-y-6">
@@ -112,7 +109,7 @@ export default function Settings() {
           </div>
           <div className="space-y-3">
             {categories.map(c => (
-              <div key={c.id} className="flex flex-col gap-2 p-4 bg-black/5 dark:bg-white/5 rounded-2xl">
+              <div key={c.id} className="flex flex-col gap-2 p-4 bg-ui-section rounded-2xl">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-2">
                     <span 
@@ -124,7 +121,7 @@ export default function Settings() {
                   {c.label.trim().toLowerCase() !== 'uncategorized' && (
                     <button 
                       onClick={() => deleteCategory(c.id)}
-                      className="p-1 hover:text-red-500 transition-colors opacity-30 hover:opacity-100"
+                      className="ui-icon-button p-1 hover:text-red-500 transition-colors opacity-30 hover:opacity-100"
                       title={`Delete ${c.label}`}
                     >
                       <Trash2 size={14} />
@@ -137,7 +134,7 @@ export default function Settings() {
                      <input 
                        type="number"
                        placeholder="Monthly limit"
-                       className="w-full bg-background border border-black/5 dark:border-white/5 rounded-2xl px-4 py-3.5 pl-12 text-xs font-bold outline-none focus:ring-1 focus:ring-black/10 dark:focus:ring-white/10 transition-all"
+                       className="ui-field ui-field-leading w-full bg-background border border-ui-border rounded-2xl px-4 py-3.5 pl-12 text-xs font-bold outline-none focus:ring-1 focus:ring-black/10 dark:focus:ring-white/10 transition-all"
                        value={c.budgetLimit || ''}
                        onChange={e => updateCategory(c.id, { budgetLimit: parseFloat(e.target.value) || 0 })}
                      />
@@ -168,11 +165,11 @@ export default function Settings() {
           </div>
           <div className="flex flex-wrap gap-2">
             {tags.map(t => (
-              <div key={t.id} className="flex items-center gap-2 bg-black/5 dark:bg-white/5 pl-4 pr-2 py-2 rounded-xl">
+              <div key={t.id} className="flex items-center gap-2 bg-ui-section pl-4 pr-2 py-2 rounded-xl">
                 <span className="text-xs font-bold">{t.label}</span>
-                <button 
+                <button aria-label="Delete"
                   onClick={() => deleteTag(t.id)}
-                  className="p-1 hover:text-red-500 transition-colors opacity-30 hover:opacity-100"
+                  className="ui-icon-button p-1 hover:text-red-500 transition-colors opacity-30 hover:opacity-100"
                 >
                   <Trash2 size={12} />
                 </button>
@@ -195,8 +192,8 @@ export default function Settings() {
                   className={cn(
                     "flex flex-col items-center justify-center p-3 rounded-2xl border transition-all text-center cursor-pointer",
                     isSelected
-                      ? "bg-black text-white dark:bg-white dark:text-black border-transparent shadow-sm font-bold scale-[1.02]"
-                      : "bg-black/5 dark:bg-white/5 border-black/5 dark:border-white/5 hover:bg-black/10 dark:hover:bg-white/10 opacity-75 hover:opacity-100"
+                      ? "bg-ui-primary text-ui-primary-text border-transparent shadow-sm font-bold scale-[1.02]"
+                      : "bg-ui-section border-ui-border hover:bg-black/10 dark:hover:bg-white/10 opacity-75 hover:opacity-100"
                   )}
                 >
                   <span className="text-lg font-black leading-tight">{c.symbol}</span>
@@ -207,8 +204,8 @@ export default function Settings() {
             })}
           </div>
 
-          <div className="flex items-center justify-between px-1 pt-1 border-t border-black/5 dark:border-white/5">
-            <span className="text-[10px] font-bold uppercase tracking-wider opacity-40">
+          <div className="flex items-center justify-between px-1 pt-1 border-t border-ui-border">
+            <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40">
               Active Format
             </span>
             <span className="text-[11px] font-mono font-bold opacity-80">
@@ -220,25 +217,14 @@ export default function Settings() {
 
       {/* Appearance */}
       <Card label="Appearance">
-        <div className="p-4 flex items-center justify-between">
+        <div className="ui-setting-row p-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-black/5 dark:bg-white/5 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-ui-section flex items-center justify-center">
               <Moon size={18} />
             </div>
             <span className="font-bold">Dark Mode</span>
           </div>
-          <button 
-            onClick={toggleTheme}
-            className={cn(
-              "w-12 h-6 rounded-full transition-colors relative",
-              isDark ? "bg-white" : "bg-black/10"
-            )}
-          >
-            <div className={cn(
-              "w-4 h-4 rounded-full absolute top-1 transition-all",
-              isDark ? "right-1 bg-black" : "left-1 bg-white"
-            )} />
-          </button>
+          <SettingsSwitch checked={isDark} onClick={toggleTheme} label="Dark Mode" />
         </div>
       </Card>
 
@@ -246,7 +232,7 @@ export default function Settings() {
       <Card label="Account">
         {user ? (
           <div className="p-6 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-black dark:bg-white flex items-center justify-center text-white dark:text-black shrink-0">
+            <div className="w-12 h-12 rounded-full bg-ui-primary flex items-center justify-center text-ui-primary-text shrink-0">
               <User size={24} />
             </div>
             <div className="min-w-0">
@@ -255,7 +241,7 @@ export default function Settings() {
             </div>
           </div>
         ) : (
-          <form onSubmit={handleAuth} className="p-6 space-y-4">
+          <ValidatedForm onSubmit={handleAuth} className="p-6 space-y-4">
             <div className="space-y-1">
               <p className="font-bold text-center">{isSignUp ? 'Create an account' : 'Sign in to sync your data'}</p>
               <p className="text-[10px] text-center opacity-40 uppercase tracking-widest font-bold">Secure backup & sync</p>
@@ -289,7 +275,7 @@ export default function Settings() {
               </div>
             </div>
 
-            {authError && <p className="text-red-500 text-[10px] font-bold uppercase text-center">{authError}</p>}
+            {authError && <p role="alert" className="ui-error text-red-500 text-[10px] font-bold uppercase text-center">{authError}</p>}
 
             <Button className="w-full" type="submit" disabled={authLoading}>
               {authLoading ? 'Please wait...' : (isSignUp ? 'Create Account' : 'Sign In')}
@@ -302,16 +288,16 @@ export default function Settings() {
             >
               {isSignUp ? 'Already have an account? Sign In' : 'Create an account'}
             </button>
-          </form>
+          </ValidatedForm>
         )}
       </Card>
 
       {/* Actions */}
       <div className="space-y-2 mt-8">
         {user && (
-          <button onClick={signOut} className="w-full p-6 bg-black/5 dark:bg-white/5 rounded-[24px] flex items-center justify-between hover:bg-black/10 transition-colors text-left group">
+          <button onClick={signOut} className="ui-setting-action w-full p-6 bg-ui-section rounded-[24px] flex items-center justify-between hover:bg-black/10 transition-colors text-left group">
             <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-white dark:bg-black/20 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-ui-surface flex items-center justify-center">
                 <LogOut size={18} />
               </div>
               <span className="font-bold">Sign Out</span>
@@ -320,9 +306,9 @@ export default function Settings() {
           </button>
         )}
 
-        <button onClick={handleCSV} className="w-full p-6 bg-black/5 dark:bg-white/5 rounded-[24px] flex items-center justify-between hover:bg-black/10 transition-colors text-left group">
+        <button onClick={handleCSV} className="ui-setting-action w-full p-6 bg-ui-section rounded-[24px] flex items-center justify-between hover:bg-black/10 transition-colors text-left group">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-white dark:bg-black/20 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-xl bg-ui-surface flex items-center justify-center">
               <Download size={18} />
             </div>
             <span className="font-bold">Download CSV</span>
@@ -330,12 +316,12 @@ export default function Settings() {
           <ChevronRight size={18} className="opacity-0 group-hover:opacity-40 transition-opacity" />
         </button>
 
-        <button onClick={() => setIsResetModal(true)} className="w-full p-6 bg-red-500/5 rounded-[24px] flex items-center justify-between hover:bg-red-500/10 transition-colors text-left group">
+        <button onClick={() => setIsResetModal(true)} className="ui-setting-action w-full p-6 bg-red-500/5 rounded-[24px] flex items-center justify-between hover:bg-red-500/10 transition-colors text-left group">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-white dark:bg-black/20 flex items-center justify-center text-red-500">
+            <div className="w-10 h-10 rounded-xl bg-ui-surface flex items-center justify-center text-red-500">
               <RotateCcw size={18} />
             </div>
-            <span className="font-bold text-red-500">Reset Data</span>
+            <span className="font-bold text-red-500">Reset data</span>
           </div>
           <ChevronRight size={18} className="opacity-0 group-hover:opacity-40 transition-opacity" />
         </button>
@@ -355,17 +341,17 @@ export default function Settings() {
           href={SUPPORT_URL} 
           target="_blank" 
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 bg-black text-white dark:bg-white dark:text-black px-6 py-3 rounded-full text-xs font-bold uppercase tracking-wider scale-90 hover:scale-100 transition-all"
+          className="inline-flex items-center gap-2 bg-ui-primary text-ui-primary-text px-6 py-3 rounded-full text-xs font-bold uppercase tracking-wider scale-90 transition-all"
         >
           <Heart size={14} />
           Support the project
         </a>
       </footer>
 
-      <Modal isOpen={isResetModal} onClose={() => setIsResetModal(false)} title="Reset Data">
+      <Modal isOpen={isResetModal} onClose={() => setIsResetModal(false)} title="Reset data">
         <div className="space-y-4">
-          <p className="text-sm opacity-60">This action is dangerous and cannot be undone. Please choose carefully.</p>
-          <div className="grid gap-3">
+          <p className="text-sm opacity-60">This action is permanent.</p>
+          <DialogActions>
             <Button onClick={() => { resetData('history'); setIsResetModal(false); }} variant="secondary">
               Clear History
             </Button>
@@ -375,7 +361,7 @@ export default function Settings() {
             <Button onClick={() => setIsResetModal(false)} variant="ghost">
               Cancel
             </Button>
-          </div>
+          </DialogActions>
         </div>
       </Modal>
     </PageContainer>

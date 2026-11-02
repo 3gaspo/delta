@@ -1,6 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import { ACTIONS } from '@3gaspo/app-ui/labels';
+import { ValidatedForm } from '../ValidatedForm';
+import React, { useState, useMemo, useId } from 'react';
 import { useData } from '../../providers/DataProvider';
 import { Account, AccountType, DebtDirection } from '../../types';
+import { DialogActions } from '../Dialog';
 import { Button, Input, Select } from '../ui/Base';
 import { Landmark, Archive, Wallet, EyeOff, AlertCircle, Trash2, Calculator, Users } from 'lucide-react';
 import { isInitialBalanceTx, getAccountBalance } from '../../utils/financial';
@@ -13,6 +16,7 @@ interface AccountFormProps {
 }
 
 export function AccountForm({ onClose, initialData, initialDeleteConfirm = false }: AccountFormProps) {
+  const formId = useId();
   const { addAccount, updateAccount, deleteAccount, transactions, recurringTransactions, settings } = useData();
 
   const [formData, setFormData] = useState({
@@ -128,7 +132,7 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
           </div>
         </div>
 
-        {error && <p className="text-red-500 text-xs font-semibold p-3 bg-red-500/10 rounded-xl">{error}</p>}
+        {error && <p role="alert" className="ui-error text-red-500 text-xs font-semibold p-3 bg-red-500/10 rounded-xl">{error}</p>}
 
         <p className="text-xs text-foreground/70">
           {associatedTxCount > 0 
@@ -136,7 +140,7 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
             : 'Permanently remove this account.'}
         </p>
 
-        <div className="flex flex-col gap-2 pt-2">
+        <DialogActions>
           <Button
             type="button"
             variant="destructive"
@@ -144,7 +148,7 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
             disabled={loading}
             className="w-full text-xs font-bold py-3"
           >
-            {loading ? 'Deleting...' : 'Delete Account'}
+            {loading ? ACTIONS.deleting : ACTIONS.delete}
           </Button>
 
           {associatedTxCount > 0 && (
@@ -174,19 +178,19 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
           >
             Cancel
           </Button>
-        </div>
+        </DialogActions>
       </div>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {error && <p className="text-red-500 text-sm font-medium">{error}</p>}
+    <ValidatedForm id={formId} onSubmit={handleSubmit} className="space-y-6">
+      {error && <p role="alert" className="ui-error text-red-500 text-sm font-medium">{error}</p>}
 
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          <label className="block">
-            <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Account Name</span>
+          <label className="ui-field-label block">
+            <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Account Name</span>
             <Input 
               placeholder="e.g. Bank Account" 
               icon={Landmark}
@@ -196,8 +200,8 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
               className="text-lg font-bold"
             />
           </label>
-          <label className="block">
-            <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Initial Amount</span>
+          <label className="ui-field-label block">
+            <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Initial Amount</span>
             <Input 
               placeholder="0.00" 
               icon={Wallet}
@@ -210,7 +214,7 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
         </div>
 
         {initialData && (
-          <div className="p-4 bg-black/5 dark:bg-white/5 rounded-2xl flex items-center justify-between border border-black/5 dark:border-white/5">
+          <div className="p-4 bg-ui-section rounded-2xl flex items-center justify-between border border-ui-border">
             <div className="flex items-center gap-2 text-foreground/70">
               <Calculator size={16} />
               <span className="text-xs font-medium">Recomputed Current Value</span>
@@ -222,8 +226,8 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
         )}
 
         <div className="grid grid-cols-2 gap-4">
-          <label className="block">
-            <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Type</span>
+          <label className="ui-field-label block">
+            <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Type</span>
             <Select 
               value={formData.type}
               onChange={e => setFormData({ ...formData, type: e.target.value as AccountType })}
@@ -233,8 +237,8 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
             </Select>
           </label>
           {formData.type === 'debt' && (
-            <label className="block">
-              <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Direction</span>
+            <label className="ui-field-label block">
+              <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Direction</span>
               <Select 
                 value={formData.debtDirection}
                 onChange={e => setFormData({ ...formData, debtDirection: e.target.value as DebtDirection })}
@@ -247,7 +251,7 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
         </div>
 
         {formData.type === 'regular' && (
-          <div className="p-4 bg-black/5 dark:bg-white/5 rounded-2xl space-y-3 border border-black/5 dark:border-white/5">
+          <div className="p-4 bg-ui-section rounded-2xl space-y-3 border border-ui-border">
             <label className="flex items-center justify-between cursor-pointer">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400 flex items-center justify-center shrink-0">
@@ -266,8 +270,8 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
             </label>
 
             {formData.isShared && (
-              <div className="pt-3 border-t border-black/5 dark:border-white/5 space-y-2.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider opacity-40 block">
+              <div className="pt-3 border-t border-ui-border space-y-2.5">
+                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 block">
                   Default Personal Share
                 </span>
                 <div className="flex items-center gap-2">
@@ -289,12 +293,12 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
                             setFormData({ ...formData, defaultMyShareRatio: opt.val as number });
                           }
                         }}
-                        className={cn(
+                        className={"ui-button " + (cn(
                           "px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer",
                           isSelected 
                             ? "bg-foreground text-background" 
-                            : "bg-black/5 dark:bg-white/5 hover:bg-black/10 text-foreground/70"
-                        )}
+                            : "bg-ui-section hover:bg-black/10 text-foreground/70"
+                        ))}
                       >
                         {opt.label}
                       </button>
@@ -326,7 +330,7 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
         )}
 
         <div className="space-y-2">
-          <label className="flex items-center gap-3 p-4 bg-black/5 dark:bg-white/5 rounded-2xl cursor-pointer">
+          <label className="flex items-center gap-3 p-4 bg-ui-section rounded-2xl cursor-pointer">
             <input 
               type="checkbox" 
               checked={formData.hidden}
@@ -342,7 +346,7 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
           </label>
 
           {initialData && (
-            <label className="flex items-center gap-3 p-4 bg-black/5 dark:bg-white/5 rounded-2xl cursor-pointer">
+            <label className="flex items-center gap-3 p-4 bg-ui-section rounded-2xl cursor-pointer">
               <input 
               type="checkbox" 
               checked={formData.archived}
@@ -360,9 +364,9 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
       </div>
     </div>
 
-    <div className="space-y-3">
+      <DialogActions form={formId} cancel>
       <Button type="submit" disabled={loading} className="w-full">
-        {loading ? 'Saving...' : initialData ? 'Update Account' : 'Create Account'}
+        {loading ? ACTIONS.saving : ACTIONS.save}
       </Button>
       {initialData && (
         <Button 
@@ -372,10 +376,10 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
           disabled={loading} 
           className="w-full"
         >
-          Delete Account
+          Delete
         </Button>
       )}
-    </div>
-  </form>
+      </DialogActions>
+  </ValidatedForm>
   );
 }

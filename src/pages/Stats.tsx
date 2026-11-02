@@ -1,3 +1,5 @@
+import { chartTooltipStyle, chartLabelStyle } from '../styles/chartTheme';
+import { StateFeedback } from '../components/StateFeedback';
 import React, { useMemo, useState } from 'react';
 import { useData } from '../providers/DataProvider';
 import { PageContainer } from '../components/layout/PageContainer';
@@ -157,23 +159,21 @@ export default function Stats() {
   }, [transactions, categories, accounts, includeDebts, globalFilterId, balancePeriod, balanceAccountId, flowPeriod, flowTypeFilter]);
 
   if (loading || !stats) return (
-    <PageContainer title="Stats">
-      <div className="flex items-center justify-center min-h-[400px]">
-        <p className="opacity-40 animate-pulse text-xs font-black uppercase tracking-widest">Calculating...</p>
-      </div>
+    <PageContainer title="Statistics">
+      <StateFeedback kind="loading" />
     </PageContainer>
   );
 
   return (
-    <PageContainer title="Stats">
-      <div className="space-y-12">
+    <PageContainer title="Statistics">
+      <div className="space-y-6">
         {/* Global Filters */}
         <header>
-          <div className="flex flex-col gap-3 p-6 bg-black/5 dark:bg-white/5 rounded-[32px] border border-black/5 dark:border-white/5">
+          <div className="ui-section-card flex flex-col gap-3 p-6 bg-ui-section rounded-[32px] border border-ui-border">
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-40">Filter Analytics</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Select 
-                value={globalFilterId} 
+                aria-label="Analytics category or tag" value={globalFilterId}
                 onChange={(e) => setGlobalFilterId(e.target.value)} 
                 className="h-12 text-xs"
               >
@@ -189,12 +189,12 @@ export default function Stats() {
               <button 
                 type="button"
                 onClick={() => setIncludeDebts(!includeDebts)}
-                className={cn(
+                className={"ui-button " + (cn(
                   "flex items-center justify-center gap-2 px-6 py-3 rounded-2xl text-xs font-bold uppercase tracking-wider transition-all border cursor-pointer",
                   includeDebts 
-                    ? "bg-black/5 dark:bg-white/10 text-foreground border-black/10 dark:border-white/10" 
+                    ? "bg-ui-section text-foreground border-ui-ink/10"
                     : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
-                )}
+                ))}
               >
                 <PiggyBank size={16} />
                 {includeDebts ? "Debts Included" : "Debts Excluded"}
@@ -204,12 +204,12 @@ export default function Stats() {
         </header>
 
         {/* 1. Account Evolution */}
-        <section className="space-y-4">
+        <section className="ui-chart space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 px-1">
             <h2 className="text-lg font-bold tracking-tight">Account Evolution</h2>
-            <div className="flex gap-2 overflow-x-auto pb-1 -mb-1 md:overflow-visible">
+            <div className="ui-filter-grid flex gap-2 overflow-x-auto pb-1 -mb-1 md:overflow-visible">
               <Select 
-                value={balancePeriod} 
+                aria-label="Balance period" value={balancePeriod}
                 onChange={(e) => setBalancePeriod(e.target.value as any)} 
                 className="h-10 py-0 px-3 text-xs w-32 flex-shrink-0"
               >
@@ -217,7 +217,7 @@ export default function Stats() {
                 <option value="monthly">Monthly</option>
               </Select>
               <Select 
-                value={balanceAccountId} 
+                aria-label="Balance account" value={balanceAccountId}
                 onChange={(e) => setBalanceAccountId(e.target.value)} 
                 className="h-10 py-0 px-3 text-xs w-36"
               >
@@ -236,33 +236,26 @@ export default function Stats() {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" strokeOpacity={0.05} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'currentColor', opacity: 0.4 }} />
+                <XAxis minTickGap={24} interval="preserveStartEnd" dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'currentColor', opacity: 0.4 }} />
                 <YAxis hide domain={['auto', 'auto']} />
-                <Tooltip 
-                  contentStyle={{ 
-                    borderRadius: '20px', 
-                    border: '1px solid rgba(128,128,128,0.15)', 
-                    boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
-                    backgroundColor: 'var(--background)',
-                    color: 'var(--foreground)',
-                    padding: '12px 16px'
-                  }}
+                <Tooltip labelStyle={chartLabelStyle}
+                  contentStyle={chartTooltipStyle}
                   itemStyle={{ color: 'var(--foreground)', fontWeight: 'bold' }}
                   formatter={(value: any) => [formatCurrency(value, settings.currency), 'Balance']}
                 />
-                <Area type="monotone" dataKey="value" stroke="currentColor" fillOpacity={1} fill="url(#colorVal)" strokeWidth={3} />
+                <Area isAnimationActive={false} type="monotone" dataKey="value" stroke="currentColor" fillOpacity={1} fill="url(#colorVal)" strokeWidth={3} />
               </AreaChart>
             </ResponsiveContainer>
           </Card>
         </section>
 
         {/* 2. Cash Flow */}
-        <section className="space-y-4">
+        <section className="ui-chart space-y-4">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 px-1">
             <h2 className="text-lg font-bold tracking-tight">Cash Flow</h2>
-            <div className="flex gap-2 overflow-x-auto pb-1 -mb-1 md:overflow-visible">
+            <div className="ui-filter-grid flex gap-2 overflow-x-auto pb-1 -mb-1 md:overflow-visible">
               <Select 
-                value={flowPeriod} 
+                aria-label="Flow period" value={flowPeriod}
                 onChange={(e) => setFlowPeriod(e.target.value as any)} 
                 className="h-10 py-0 px-3 text-xs w-32 flex-shrink-0"
               >
@@ -270,7 +263,7 @@ export default function Stats() {
                 <option value="monthly">Monthly</option>
               </Select>
               <Select 
-                value={flowTypeFilter} 
+                aria-label="Flow type" value={flowTypeFilter}
                 onChange={(e) => setFlowTypeFilter(e.target.value as any)} 
                 className="h-10 py-0 px-3 text-xs w-36"
               >
@@ -295,57 +288,40 @@ export default function Stats() {
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={stats.flowData}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="currentColor" strokeOpacity={0.05} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'currentColor', opacity: 0.4 }} />
+                <XAxis minTickGap={24} interval="preserveStartEnd" dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'currentColor', opacity: 0.4 }} />
                 <YAxis hide />
-                <Tooltip 
+                <Tooltip labelStyle={chartLabelStyle}
                   cursor={{ fill: 'currentColor', fillOpacity: 0.05 }}
-                  contentStyle={{ 
-                    borderRadius: '20px', 
-                    border: '1px solid rgba(128,128,128,0.15)', 
-                    boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
-                    backgroundColor: 'var(--background)',
-                    color: 'var(--foreground)',
-                    padding: '12px 16px'
-                  }}
+                  contentStyle={chartTooltipStyle}
                   itemStyle={{ color: 'var(--foreground)', fontWeight: 'bold' }}
                   formatter={(value: any) => [formatCurrency(value, settings.currency), 'Amount']}
                 />
-                <Bar dataKey="income" fill="#10b981" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="expenses" fill="#ef4444" radius={[6, 6, 0, 0]} />
+                <Bar isAnimationActive={false} dataKey="income" fill="#10b981" radius={[6, 6, 0, 0]} />
+                <Bar isAnimationActive={false} dataKey="expenses" fill="#ef4444" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </Card>
 
           {/* Average Aggregates with Monthly/Yearly toggle */}
           <div className="space-y-3 pt-2">
-            <div className="flex items-center justify-between px-1">
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-40">
+            <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+              <span className="ui-section-title text-[10px] font-bold uppercase tracking-[0.2em] opacity-40">
                 Average Aggregates
               </span>
 
               {/* Monthly / Yearly Toggle */}
-              <div className="flex items-center p-0.5 bg-black/5 dark:bg-white/10 rounded-xl">
-                <button
+              <div className="ui-segments">
+                <button aria-pressed={avgPeriod === 'monthly'}
                   type="button"
                   onClick={() => setAvgPeriod('monthly')}
-                  className={cn(
-                    "px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer",
-                    avgPeriod === 'monthly'
-                      ? "bg-white dark:bg-black text-foreground shadow-xs"
-                      : "text-foreground/50 hover:text-foreground"
-                  )}
+                  className="ui-option"
                 >
                   Monthly
                 </button>
-                <button
+                <button aria-pressed={avgPeriod === 'yearly'}
                   type="button"
                   onClick={() => setAvgPeriod('yearly')}
-                  className={cn(
-                    "px-3 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer",
-                    avgPeriod === 'yearly'
-                      ? "bg-white dark:bg-black text-foreground shadow-xs"
-                      : "text-foreground/50 hover:text-foreground"
-                  )}
+                  className="ui-option"
                 >
                   Yearly
                 </button>
@@ -354,7 +330,7 @@ export default function Stats() {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {/* Avg expenses */}
-              <div className="p-4 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-2xl flex flex-col justify-between">
+              <div className="p-4 bg-ui-section border border-ui-border rounded-2xl flex flex-col justify-between">
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-wider opacity-40">
                     avg expenses
@@ -387,7 +363,7 @@ export default function Stats() {
               </div>
 
               {/* Avg income */}
-              <div className="p-4 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-2xl flex flex-col justify-between">
+              <div className="p-4 bg-ui-section border border-ui-border rounded-2xl flex flex-col justify-between">
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-wider opacity-40">
                     avg income
@@ -416,7 +392,7 @@ export default function Stats() {
               </div>
 
               {/* Avg net */}
-              <div className="p-4 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-2xl flex flex-col justify-between">
+              <div className="p-4 bg-ui-section border border-ui-border rounded-2xl flex flex-col justify-between">
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-wider opacity-40">
                     avg net
@@ -458,11 +434,11 @@ export default function Stats() {
           <Card className="p-0 overflow-hidden">
             <div className="flex flex-col lg:flex-row">
               {/* Chart Side */}
-              <div className="p-8 border-b lg:border-b-0 lg:border-r border-black/5 dark:border-white/5 flex flex-col items-center justify-center bg-black/[0.02] dark:bg-white/[0.02] lg:w-1/2">
-                <div className="w-full max-w-[280px] aspect-square">
+              <div className="p-8 border-b lg:border-b-0 lg:border-r border-ui-border flex flex-col items-center justify-center bg-black/[0.02] dark:bg-white/[0.02] lg:w-1/2">
+                <div className="ui-chart w-full max-w-[280px] aspect-square">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie
+                      <Pie isAnimationActive={false}
                         data={stats.categoryTotals}
                         innerRadius="65%"
                         outerRadius="90%"
@@ -474,15 +450,8 @@ export default function Stats() {
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
                       </Pie>
-                      <Tooltip 
-                        contentStyle={{ 
-                          borderRadius: '20px', 
-                          border: '1px solid rgba(128,128,128,0.15)', 
-                          boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)',
-                          backgroundColor: 'var(--background)',
-                          color: 'var(--foreground)',
-                          padding: '12px 16px'
-                        }}
+                      <Tooltip labelStyle={chartLabelStyle}
+                        contentStyle={chartTooltipStyle}
                         itemStyle={{ color: 'var(--foreground)', fontWeight: 'bold' }}
                         formatter={(value: any) => [formatCurrency(value, settings.currency), 'Spent']}
                       />
@@ -497,7 +466,7 @@ export default function Stats() {
 
               {/* List Side */}
               <div className="p-6 sm:p-8 flex flex-col min-h-[380px] lg:w-1/2">
-                <div className="flex items-center justify-between mb-6 pb-3 border-b border-black/5 dark:border-white/5 shrink-0">
+                <div className="flex items-center justify-between mb-6 pb-3 border-b border-ui-border shrink-0">
                   <p className="text-[10px] font-bold uppercase tracking-widest opacity-40">Monthly Budget Progress</p>
                 </div>
                 <div className="flex-1 overflow-y-auto pr-2 -mr-2 custom-scrollbar">
@@ -525,7 +494,7 @@ export default function Stats() {
                             )}
                           </div>
                         </div>
-                        <div className="h-2 w-full bg-black/5 dark:bg-white/5 rounded-full overflow-hidden">
+                        <div className="h-2 w-full bg-ui-section rounded-full overflow-hidden">
                           <div 
                             className={cn(
                               "h-full rounded-full transition-all duration-1000 ease-out",

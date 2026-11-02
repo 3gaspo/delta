@@ -183,7 +183,7 @@ export default function BankImport() {
     setMessage('Draft cleared. Saved transactions remain in Delta.');
   }
 
-  return <PageContainer title="Bank import" actions={<Link to="/home" aria-label="Back to transactions" className="p-3 rounded-2xl bg-black/5 dark:bg-white/5"><ArrowLeft size={20} /></Link>}>
+  return <PageContainer title="Bank import" actions={<Link to="/home" aria-label="Back to transactions" className="p-3 rounded-2xl bg-ui-section"><ArrowLeft size={20} /></Link>}>
     <div className="space-y-5">
       {error && <p role="alert" className="rounded-2xl bg-red-500/10 p-4 text-sm">{error}</p>}
       {bankImportError && <p role="alert" className="rounded-2xl bg-red-500/10 p-4 text-sm">{bankImportError}</p>}
@@ -213,18 +213,18 @@ export default function BankImport() {
           const info = duplicate(i);
           const disabled = busy || info.exact;
           const type = original.amountCents > 0 ? 'income' : 'expense';
-          return <fieldset key={row.source.key} aria-label={original.name} disabled={disabled} className="rounded-[32px] bg-black/5 dark:bg-white/5 p-4 sm:p-5 min-w-0 space-y-3">
+          return <fieldset key={row.source.key} aria-label={original.name} disabled={disabled} className="rounded-[32px] bg-ui-section p-4 sm:p-5 min-w-0 space-y-3">
             <label className="flex items-center gap-3 cursor-pointer p-1">
               <input aria-label={`Select ${original.name}`} type="checkbox" className="h-5 w-5 shrink-0 accent-black dark:accent-white cursor-pointer disabled:cursor-default" checked={isSelected(i)} disabled={disabled} onChange={e => patch(i, { selected: e.target.checked })} />
-              <span className="min-w-0 flex-1"><span className="block text-sm font-bold break-words">{original.name}</span><span className="text-[10px] uppercase tracking-wider opacity-40">{original.date}</span></span>
+              <span className="min-w-0 flex-1"><span className="block text-sm font-bold break-words">{original.name}</span><span className="ui-section-title text-[10px] uppercase tracking-wider opacity-40">{original.date}</span></span>
               <span className={cn('font-bold text-sm whitespace-nowrap', type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500')}>{formatCurrency(original.amountCents / 100, 'EUR')}</span>
             </label>
             {info.exact && <p className="text-sm text-emerald-700 dark:text-emerald-400">{row.saved || 'Already imported'}</p>}
             {!!info.matches.length && !info.exact && <p className="text-xs text-amber-700 dark:text-amber-400">Possible match: {info.matches.map(t => `${t.name}${t.status === 'pending' ? ' (pending)' : ''}`).slice(0, 3).join(', ')}</p>}
             {info.repeated && !info.exact && <p className="text-xs text-amber-700 dark:text-amber-400">Identical payments in this draft</p>}
-            {row.error && <p role="alert" className="text-sm text-red-600">{row.error}</p>}
-            {!info.exact && <div className="bg-white dark:bg-black/20 rounded-2xl p-4 space-y-4 shadow-sm">
-              <label className="block"><span className={labelClass}>Name</span><Input icon={AlignLeft} value={row.name} maxLength={500} onChange={e => patch(i, { name: e.target.value })} /></label>
+            {row.error && <p role="alert" className="ui-error text-sm text-red-600">{row.error}</p>}
+            {!info.exact && <div className="ui-item-card bg-ui-surface rounded-2xl p-4 space-y-4 shadow-sm">
+              <label className="ui-field-label block"><span className={labelClass}>Name</span><Input icon={AlignLeft} value={row.name} maxLength={500} onChange={e => patch(i, { name: e.target.value })} /></label>
               <div><span className={labelClass}>Type</span>
                 <Select aria-label="Type" icon={ArrowRightLeft} value={row.transfer ? 'transfer' : type} onChange={e => patch(i, { transfer: e.target.value === 'transfer' })}>
                   <option value={type}>{type === 'income' ? 'Income' : 'Expense'}</option><option value="transfer">Transfer between my accounts</option>
@@ -242,16 +242,16 @@ export default function BankImport() {
                 </Select>
               </div>}
               <div><span className={labelClass}>Status</span><Select aria-label="Status" icon={Clock3} value={row.status} onChange={e => patch(i, { status: e.target.value as 'normal' | 'pending' })}><option value="normal">Normal</option><option value="pending">Pending</option></Select></div>
-              {account?.isShared && !row.transfer && <label className="block"><span className={labelClass}>My share (%)</span><Input type="number" min={0} max={100} step="any" value={row.share ?? (account.defaultMyShareRatio ?? 0.5) * 100} onChange={e => patch(i, { share: e.target.value === '' ? NaN : Number(e.target.value) })} /></label>}
+              {account?.isShared && !row.transfer && <label className="ui-field-label block"><span className={labelClass}>My share (%)</span><Input type="number" min={0} max={100} step="any" value={row.share ?? (account.defaultMyShareRatio ?? 0.5) * 100} onChange={e => patch(i, { share: e.target.value === '' ? NaN : Number(e.target.value) })} /></label>}
               {!!tags.length && <details><summary className="text-[10px] font-bold uppercase tracking-wider opacity-50 cursor-pointer">Tags ({row.tagIds.length})</summary><div className="flex flex-wrap gap-3 py-2">
                 {tags.map(tag => <label key={tag.id} className="text-xs flex items-center gap-2 cursor-pointer"><input type="checkbox" className="h-4 w-4 accent-black dark:accent-white" checked={row.tagIds.includes(tag.id)} onChange={e => patch(i, { tagIds: e.target.checked ? [...row.tagIds, tag.id] : row.tagIds.filter(id => id !== tag.id) })} />{tag.label}</label>)}
               </div></details>}
-              <label className="block"><span className={labelClass}>Notes</span><Input icon={AlignLeft} placeholder="Optional" value={row.description} maxLength={2000} onChange={e => patch(i, { description: e.target.value })} /></label>
+              <label className="ui-field-label block"><span className={labelClass}>Notes</span><Input icon={AlignLeft} placeholder="Optional" value={row.description} maxLength={2000} onChange={e => patch(i, { description: e.target.value })} /></label>
             </div>}
           </fieldset>;
         })}
         {!!payload.warnings.length && <details className="text-xs opacity-60"><summary className="cursor-pointer">Import notices ({payload.warnings.length})</summary>{payload.warnings.map((warning, i) => <p key={i} className="mt-2">{warning}</p>)}</details>}
-        <div className="sticky bottom-24 p-3 rounded-2xl bg-background border border-black/10 dark:border-white/10 space-y-2 shadow-lg">
+        <div className="sticky app-sticky-actions p-3 rounded-2xl bg-background border border-ui-ink/10 space-y-2 shadow-lg">
           <Button className="w-full" onClick={save} disabled={busy || loading || !bankImportReady || !account || !selectedCount || settings.currency !== 'EUR'}>{busy ? 'Saving…' : !account ? 'Choose an account to import' : `Validate ${selectedCount} transactions`}</Button>
           <Button className="w-full" variant="ghost" onClick={discard} disabled={busy}>Clear draft</Button>
         </div>

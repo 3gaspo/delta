@@ -1,3 +1,5 @@
+import { formatDate } from '@3gaspo/app-ui/formats';
+import { StateFeedback } from '../components/StateFeedback';
 import { useState, useMemo } from 'react';
 import { useData } from '../providers/DataProvider';
 import { PageContainer } from '../components/layout/PageContainer';
@@ -6,6 +8,7 @@ import { AccountCard } from '../components/accounts/AccountCard';
 import { RecurringList } from '../components/transactions/RecurringList';
 import { Modal } from '../components/ui/Modal';
 import { AccountForm } from '../components/accounts/AccountForm';
+import { FloatingAddButton } from '../components/FloatingAddButton';
 import { AccountDetailModal } from '../components/accounts/AccountDetailModal';
 import { AccountReorderModal } from '../components/accounts/AccountReorderModal';
 import { TransactionForm, FormTabMode } from '../components/transactions/TransactionForm';
@@ -41,11 +44,12 @@ export default function Accounts() {
     return getActiveCashflowAlerts(regularAccounts, transactions, recurringTransactions);
   }, [regularAccounts, transactions, recurringTransactions]);
 
-  if (loading) return null;
+  if (loading) return <PageContainer title="Accounts"><StateFeedback kind="loading" /></PageContainer>;
 
   return (
     <PageContainer 
       title="Accounts"
+      className="app-home-content"
       actions={
         <div className="flex items-center gap-2">
           {accounts.length > 1 && (
@@ -53,15 +57,12 @@ export default function Accounts() {
               variant="outline" 
               size="sm" 
               onClick={() => setIsReordering(true)}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold"
+              className="ui-reorder-trigger inline-flex items-center gap-1.5 text-xs font-semibold"
               title="Reorder accounts"
             >
               <ArrowUpDown size={15} /> Reorder
             </Button>
           )}
-          <Button size="icon" onClick={() => setIsAdding(true)} title="New Account">
-            <Plus size={20} />
-          </Button>
         </div>
       }
     >
@@ -100,7 +101,7 @@ export default function Accounts() {
                       <span className="text-[10px] font-bold text-red-600 dark:text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">
                         {alert.isNegativeNow 
                           ? `Currently ${formatCurrency(alert.currentBalance, settings.currency)}` 
-                          : `Drops to ${formatCurrency(alert.firstNegativeBalance!, settings.currency)} on ${new Date(alert.firstNegativeDate!).toLocaleDateString([], { month: 'short', day: 'numeric' })}`}
+                          : `Drops to ${formatCurrency(alert.firstNegativeBalance!, settings.currency)} on ${formatDate(alert.firstNegativeDate!, 'compact')}`}
                       </span>
                     </div>
 
@@ -123,7 +124,7 @@ export default function Accounts() {
         </div>
       )}
 
-      <div className="mb-8 p-6 sm:p-8 bg-black/5 dark:bg-white/5 border border-black/5 dark:border-white/5 rounded-[40px] flex flex-col gap-6">
+      <div className="mb-8 p-6 sm:p-8 bg-ui-section border border-ui-border rounded-[40px] flex flex-col gap-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 sm:gap-x-8 gap-y-1 sm:gap-y-2 items-baseline">
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-40 sm:col-start-1 sm:row-start-1">Current Assets</p>
           <p className="text-2xl font-black tracking-tighter min-w-0 whitespace-nowrap sm:col-start-1 sm:row-start-2">
@@ -140,7 +141,7 @@ export default function Accounts() {
           </p>
         </div>
 
-        <div className="pt-4 border-t border-black/5 dark:border-white/5 grid grid-cols-3 gap-2 sm:gap-4 items-center">
+        <div className="pt-4 border-t border-ui-border grid grid-cols-3 gap-2 sm:gap-4 items-center">
           <div className="min-w-0">
             <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wider opacity-40 truncate">
               Exp. Gains
@@ -177,7 +178,7 @@ export default function Accounts() {
         </div>
       </div>
 
-      <div className="space-y-8">
+      <div className="space-y-6">
         <Card label="Regular Accounts">
           <div className="divide-y divide-black/5 dark:divide-white/5">
             {regularAccounts.map(a => (
@@ -190,10 +191,7 @@ export default function Accounts() {
               />
             ))}
             {regularAccounts.length === 0 && (
-              <div className="p-8 text-center opacity-30 flex flex-col items-center gap-2">
-                <Landmark size={24} strokeWidth={1.5} />
-                <p className="font-bold uppercase tracking-[0.2em] text-[10px]">No regular accounts</p>
-              </div>
+              <StateFeedback title="No regular accounts" />
             )}
           </div>
         </Card>
@@ -210,10 +208,7 @@ export default function Accounts() {
               />
             ))}
             {debtAccounts.length === 0 && (
-              <div className="p-8 text-center opacity-30 flex flex-col items-center gap-2">
-                <TrendingDown size={24} strokeWidth={1.5} />
-                <p className="font-bold uppercase tracking-[0.2em] text-[10px]">No debt accounts</p>
-              </div>
+              <StateFeedback title="No debt accounts" />
             )}
           </div>
         </Card>
@@ -241,15 +236,16 @@ export default function Accounts() {
         </Card>
       </div>
 
-      <Modal isOpen={isAdding} onClose={() => setIsAdding(false)} title="New Account">
+      <FloatingAddButton label="Add account" onClick={() => setIsAdding(true)} />
+      <Modal isOpen={isAdding} onClose={() => setIsAdding(false)} title="Add account">
         <AccountForm onClose={() => setIsAdding(false)} />
       </Modal>
 
-      <Modal isOpen={!!editingAccount} onClose={() => setEditingAccount(null)} title="Edit Account">
+      <Modal isOpen={!!editingAccount} onClose={() => setEditingAccount(null)} title="Edit account">
         {editingAccount && <AccountForm onClose={() => setEditingAccount(null)} initialData={editingAccount} />}
       </Modal>
 
-      <Modal isOpen={!!deletingAccount} onClose={() => setDeletingAccount(null)} title="Delete Account">
+      <Modal isOpen={!!deletingAccount} onClose={() => setDeletingAccount(null)} title="Delete account">
         {deletingAccount && (
           <AccountForm 
             onClose={() => setDeletingAccount(null)} 
@@ -262,7 +258,7 @@ export default function Accounts() {
       <Modal 
         isOpen={isAddingRecurring} 
         onClose={() => setIsAddingRecurring(false)} 
-        title={recurringAddMode === 'transfer' ? "New Recurring Transfer" : "New Recurring Transaction"}
+        title={recurringAddMode === 'transfer' ? "Add recurring transfer" : "Add recurring transaction"}
       >
         <TransactionForm 
           onClose={() => setIsAddingRecurring(false)} 

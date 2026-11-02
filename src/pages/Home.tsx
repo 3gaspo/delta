@@ -1,12 +1,15 @@
+import { SearchField } from '../components/SearchField';
+import { StateFeedback } from '../components/StateFeedback';
 import { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useData } from '../providers/DataProvider';
 import { PageContainer } from '../components/layout/PageContainer';
 import { TransactionList } from '../components/transactions/TransactionList';
-import { Card, Button, Input, Select } from '../components/ui/Base';
+import { Card, Input, Select } from '../components/ui/Base';
 import { Modal } from '../components/ui/Modal';
 import { TransactionForm, FormTabMode } from '../components/transactions/TransactionForm';
-import { Plus, Search, Download } from 'lucide-react';
+import { Search, Download } from 'lucide-react';
+import { FloatingAddButton } from '../components/FloatingAddButton';
 import { computeFinancialTotals } from '../utils/financial';
 
 export default function Home() {
@@ -52,38 +55,33 @@ export default function Home() {
     setIsAdding(true);
   };
 
-  if (loading) return null;
+  if (loading) return <PageContainer title="Delta" titleClassName="app-brand-title" homeHeader><StateFeedback kind="loading" /></PageContainer>;
 
   return (
     <PageContainer 
       title="Delta" 
+      titleClassName="app-brand-title"
+      homeHeader
+      className="app-home-content"
       actions={
         <div className="flex items-center gap-2">
-          <Link to="/import" title="Import bank transactions" aria-label="Import bank transactions" className="p-3 rounded-2xl bg-black/5 dark:bg-white/5"><Download size={20} /></Link>
-          <Button size="icon" onClick={() => handleOpenAdd('single')} title="New Transaction">
-            <Plus size={20} />
-          </Button>
+          <Link to="/import" title="Import bank transactions" aria-label="Import bank transactions" className="p-3 rounded-2xl bg-ui-section"><Download size={20} /></Link>
         </div>
       }
     >
       <div className="space-y-4 mb-8">
-        <Input 
-          icon={Search} 
-          placeholder="Search transactions..." 
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
+        <SearchField label="Search transactions" value={search} onChange={setSearch} />
         
-        <div className="grid grid-cols-2 gap-4">
+        <div className="ui-filter-grid grid grid-cols-2 gap-4">
           <Select 
-            value={filters.accountId}
+            aria-label="Account" value={filters.accountId}
             onChange={e => setFilters(prev => ({ ...prev, accountId: e.target.value }))}
           >
             <option value="all">All Accounts</option>
             {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
           </Select>
           <Select 
-            value={filters.type}
+            aria-label="Transaction type" value={filters.type}
             onChange={e => setFilters(prev => ({ ...prev, type: e.target.value }))}
           >
             <option value="all">All Types</option>
@@ -94,14 +92,15 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="space-y-8">
+      <div className="space-y-6">
         {/* Transaction History Block */}
         <Card label="Transaction History" className="bg-transparent shadow-none p-0">
           <TransactionList transactions={filteredTransactions} />
         </Card>
       </div>
 
-      <Modal isOpen={isAdding} onClose={() => setIsAdding(false)} title="New Transaction">
+      <FloatingAddButton label="Add transaction" onClick={() => handleOpenAdd('single')} />
+      <Modal isOpen={isAdding} onClose={() => setIsAdding(false)} title="Add transaction">
         <TransactionForm 
           onClose={() => setIsAdding(false)} 
           allowedModes={['single', 'group', 'transfer']} 

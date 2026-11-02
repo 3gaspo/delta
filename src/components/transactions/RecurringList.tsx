@@ -1,3 +1,5 @@
+import { ActionButton } from '@3gaspo/app-ui/ActionButton';
+import { StateFeedback } from '../StateFeedback';
 import React, { useState, useMemo } from 'react';
 import { RecurringTransaction } from '../../types';
 import { useData } from '../../providers/DataProvider';
@@ -7,6 +9,7 @@ import {
   ArrowUpRight, ArrowDownLeft, ArrowRightLeft, Plus, Play, Pause, Users
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
+import { DialogActions } from '../Dialog';
 import { TransactionForm } from './TransactionForm';
 import { Button } from '../ui/Base';
 import { calculateNextDueDate, sortRecurringByNextDate } from '../../utils/recurring';
@@ -52,17 +55,13 @@ export function RecurringList({
 
   if (recurringTransactions.length === 0) {
     return (
-      <div className="p-8 text-center">
-        <div className="w-12 h-12 rounded-2xl bg-black/5 dark:bg-white/5 flex items-center justify-center mx-auto mb-3 text-foreground/40">
-          <Repeat size={24} />
-        </div>
-        <p className="text-sm font-semibold opacity-60 mb-4">No recurring transactions yet</p>
+      <StateFeedback title="No recurring transactions">
         {onAddNew && (
           <Button variant="outline" size="sm" onClick={onAddNew} className="inline-flex items-center gap-1.5 text-xs">
             <Plus size={14} /> Add Recurring Transaction
           </Button>
         )}
-      </div>
+      </StateFeedback>
     );
   }
 
@@ -148,7 +147,7 @@ export function RecurringList({
                   <button 
                     type="button"
                     onClick={() => handleToggleActive(rule)} 
-                    className="w-7 h-7 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-foreground/60 hover:text-foreground flex items-center justify-center transition-colors cursor-pointer" 
+                    className="w-7 h-7 rounded-lg bg-ui-section hover:bg-black/10 dark:hover:bg-white/20 text-foreground/60 hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
                     title={isActive ? "Pause rule" : "Resume rule"}
                     aria-label={isActive ? "Pause rule" : "Resume rule"}
                   >
@@ -157,7 +156,7 @@ export function RecurringList({
                   <button 
                     type="button"
                     onClick={() => setEditingItem(rule)} 
-                    className="w-7 h-7 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-foreground/60 hover:text-foreground flex items-center justify-center transition-colors cursor-pointer" 
+                    className="w-7 h-7 rounded-lg bg-ui-section hover:bg-black/10 dark:hover:bg-white/20 text-foreground/60 hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
                     title="Edit rule"
                     aria-label="Edit rule"
                   >
@@ -177,15 +176,15 @@ export function RecurringList({
             </div>
 
             {/* Bottom Row: Consistently Aligned Properties Shelf */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-black/[0.02] dark:bg-white/[0.02] p-2.5 rounded-xl border border-black/5 dark:border-white/5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs bg-black/[0.02] dark:bg-white/[0.02] p-2.5 rounded-xl border border-ui-border">
               {/* Schedule Column */}
               <div className="flex items-center gap-2 text-[11px] text-foreground/70 min-w-0">
                 <Calendar size={13} className="opacity-40 shrink-0" />
                 <div className="flex items-center gap-1.5 truncate">
-                  <span className="opacity-40 text-[9px] font-bold uppercase tracking-wider">Start:</span>
+                  <span className="ui-section-title opacity-40 text-[9px] font-bold uppercase tracking-wider">Start:</span>
                   <span className="font-medium">{formatDate(rule.startDate)}</span>
                   <span className="opacity-30 mx-0.5">|</span>
-                  <span className="opacity-40 text-[9px] font-bold uppercase tracking-wider">Next:</span>
+                  <span className="ui-section-title opacity-40 text-[9px] font-bold uppercase tracking-wider">Next:</span>
                   <strong className="font-bold text-foreground">{formatDate(nextDueDate)}</strong>
                 </div>
               </div>
@@ -235,7 +234,7 @@ export function RecurringList({
 
       {/* Delete Confirmation Modal */}
       {deletingItem && (
-        <Modal isOpen={!!deletingItem} onClose={() => setDeletingItem(null)} title="Delete Recurring Transaction">
+        <Modal isOpen={!!deletingItem} onClose={() => setDeletingItem(null)} title="Delete recurring transaction">
           <div className="space-y-4 py-1">
             <div className="flex items-center gap-3 text-red-500">
               <div className="w-10 h-10 rounded-2xl bg-red-500/10 flex items-center justify-center shrink-0">
@@ -253,29 +252,29 @@ export function RecurringList({
               Choose whether to keep or remove previously generated transactions:
             </p>
 
-            <div className="flex flex-col gap-2 pt-2">
-              <Button 
-                variant="secondary" 
+            <DialogActions>
+              <ActionButton scope="delta-recurring-delete"
+                className="ui-button ui-button-secondary"
                 onClick={() => confirmDelete(false)}
-                className="w-full text-xs font-semibold py-3"
+
               >
-                Delete Rule Only (Keep Past Transactions)
-              </Button>
-              <Button 
-                variant="destructive" 
+                Delete rule only (keep past transactions)
+              </ActionButton>
+              <ActionButton scope="delta-recurring-delete"
+                className="ui-button ui-button-danger"
                 onClick={() => confirmDelete(true)}
-                className="w-full text-xs font-bold py-3"
+
               >
-                Delete Rule & All Generated Transactions
-              </Button>
-              <Button 
-                variant="ghost" 
+                Delete rule and generated transactions
+              </ActionButton>
+              <ActionButton scope="delta-recurring-delete"
+                className="ui-button ui-button-ghost"
                 onClick={() => setDeletingItem(null)}
-                className="w-full text-xs font-medium py-2"
+
               >
                 Cancel
-              </Button>
-            </div>
+              </ActionButton>
+            </DialogActions>
           </div>
         </Modal>
       )}

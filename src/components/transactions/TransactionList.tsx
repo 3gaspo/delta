@@ -1,7 +1,10 @@
+import { ConfirmDelete } from '@3gaspo/app-ui/ConfirmDelete';
+import { formatTime, formatDate } from '@3gaspo/app-ui/formats';
+import { StateFeedback } from '../StateFeedback';
 import React, { useState } from 'react';
 import { Transaction } from '../../types';
 import { useData } from '../../providers/DataProvider';
-import { formatCurrency, formatDate, cn } from '../../lib/utils';
+import { formatCurrency, cn } from '../../lib/utils';
 import { Button } from '../ui/Base';
 import { startOfDay } from 'date-fns';
 import { 
@@ -9,6 +12,7 @@ import {
   AlignLeft, Repeat, Layers3, ChevronDown, ChevronUp, Layers, HandCoins, Users 
 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
+import { DialogActions } from '../Dialog';
 import { TransactionForm } from './TransactionForm';
 
 export function TransactionItem({ transaction }: { transaction: Transaction; key?: React.Key }) {
@@ -35,7 +39,7 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
       await deleteTransaction(transaction.id);
       setIsDeleting(false);
     } catch (err) {
-      console.error('Failed to delete transaction:', err);
+      throw err;
     } finally {
       setDeletingLoading(false);
     }
@@ -44,16 +48,16 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
   const txDate = new Date(transaction.date);
   const hasSpecificTime = txDate.getHours() !== 0 || txDate.getMinutes() !== 0 || txDate.getSeconds() !== 0;
   const timeFormatted = hasSpecificTime 
-    ? txDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    ? formatTime(txDate)
     : null;
 
   return (
     <div className={cn(
-      "p-3.5 sm:p-4 border-b border-black/5 dark:border-white/5 last:border-0 flex items-center justify-between gap-3 sm:gap-4 group transition-opacity",
+      "transaction-row border-b border-ui-border last:border-0 group transition-opacity",
       isHidden && "opacity-30 grayscale",
       isPending && "bg-amber-500/5"
     )}>
-      <div className="flex items-center gap-3 sm:gap-3.5 flex-1 min-w-0 overflow-hidden">
+      <div className="transaction-main">
         <div className={cn(
           "w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 shadow-xs",
           isIncome ? "bg-emerald-500/10 text-emerald-500" : 
@@ -65,8 +69,8 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
            <ArrowUpRight size={18} />}
         </div>
         
-        <div className="min-w-0 flex-1 overflow-hidden">
-          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 mb-1 overflow-hidden">
+        <div className="transaction-copy">
+          <div className="transaction-title flex items-center gap-1.5 min-w-0">
             <h4 
               className="font-bold text-sm text-foreground truncate min-w-0 shrink block"
               title={transaction.name || category?.label || 'Untitled'}
@@ -92,7 +96,7 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
           </div>
 
           {/* Consistent details order: Account -> Category -> Debt -> Time */}
-          <div className="flex items-center gap-1.5 text-[11px] text-foreground/60 min-w-0 truncate">
+          <div className="transaction-meta flex items-center gap-1.5 text-[11px] text-foreground/60 min-w-0 truncate">
             {/* 1. Account (Always first) */}
             {isTransfer ? (
               <span className="truncate font-medium text-foreground/80 flex items-center gap-1">
@@ -137,7 +141,7 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
         </div>
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-3 shrink-0 text-right ml-1 sm:ml-2">
+      <div className="transaction-trailing">
         <div>
           <p className={cn(
             "font-bold text-base sm:text-lg tracking-tight whitespace-nowrap min-w-[70px]",
@@ -154,11 +158,11 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
           )}
         </div>
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="transaction-actions flex items-center">
           <button 
             type="button"
             onClick={() => setIsEditing(true)} 
-            className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-foreground/70 hover:text-foreground flex items-center justify-center transition-colors cursor-pointer" 
+            className="ui-icon-button ui-row-action bg-ui-section hover:bg-black/10 dark:hover:bg-white/20 text-foreground/70 hover:text-foreground transition-colors cursor-pointer"
             title="Edit"
             aria-label="Edit"
           >
@@ -167,7 +171,7 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
           <button 
             type="button"
             onClick={() => setIsDeleting(true)} 
-            className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors cursor-pointer" 
+            className="ui-icon-button ui-row-action bg-red-500/10 hover:bg-red-500/20 text-red-500 transition-colors cursor-pointer"
             title="Delete"
             aria-label="Delete"
           >
@@ -176,48 +180,14 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
         </div>
       </div>
 
-      <Modal isOpen={isEditing} onClose={() => setIsEditing(false)} title="Edit Transaction">
+      <Modal isOpen={isEditing} onClose={() => setIsEditing(false)} title="Edit transaction">
         <TransactionForm onClose={() => setIsEditing(false)} initialData={transaction} />
       </Modal>
 
-      <Modal isOpen={isDeleting} onClose={() => setIsDeleting(false)} title="Delete Transaction">
-        <div className="space-y-4 py-1">
-          <div className="flex items-center gap-3 text-red-500">
-            <div className="w-10 h-10 rounded-2xl bg-red-500/10 flex items-center justify-center shrink-0">
-              <Trash2 size={20} />
-            </div>
-            <div>
-              <h3 className="font-bold text-base text-foreground">
-                Delete "{transaction.name || category?.label || 'Transaction'}"?
-              </h3>
-              <p className="text-xs text-red-500 font-medium">This cannot be undone.</p>
-            </div>
-          </div>
-          <p className="text-xs text-foreground/70">
-            Permanently remove this transaction ({formatCurrency(transaction.amount, settings.currency)}).
-          </p>
-          <div className="flex flex-col gap-2 pt-2">
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deletingLoading}
-              className="w-full text-xs font-bold py-3"
-            >
-              {deletingLoading ? 'Deleting...' : 'Delete Transaction'}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setIsDeleting(false)}
-              disabled={deletingLoading}
-              className="w-full text-xs font-medium py-2"
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      <ConfirmDelete open={isDeleting} onClose={() => setIsDeleting(false)} title="Delete transaction" onConfirm={handleDelete}>
+        <p>Delete “{transaction.name || category?.label || 'Transaction'}” ({formatCurrency(transaction.amount, settings.currency)})?</p>
+        <p>This cannot be undone.</p>
+      </ConfirmDelete>
     </div>
   );
 }
@@ -268,7 +238,7 @@ export function GroupTransactionItem({
       await deleteGroupTransaction(groupId);
       setIsDeleting(false);
     } catch (err) {
-      console.error('Failed to delete group transaction:', err);
+      throw err;
     } finally {
       setDeletingLoading(false);
     }
@@ -277,19 +247,19 @@ export function GroupTransactionItem({
   const grpDate = new Date(sharedDate);
   const hasSpecificTime = grpDate.getHours() !== 0 || grpDate.getMinutes() !== 0 || grpDate.getSeconds() !== 0;
   const timeFormatted = hasSpecificTime 
-    ? grpDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    ? formatTime(grpDate)
     : null;
 
   return (
-    <div className="border-b border-black/5 dark:border-white/5 last:border-0">
-      <div className="p-3.5 sm:p-4 flex items-center justify-between gap-3 sm:gap-4 group transition-colors hover:bg-purple-500/5">
-        <div className="flex items-center gap-3 sm:gap-3.5 flex-1 min-w-0 cursor-pointer overflow-hidden" onClick={() => setExpanded(!expanded)}>
+    <div className="border-b border-ui-border last:border-0">
+      <div className="transaction-row transaction-row--group group transition-colors hover:bg-purple-500/5">
+        <div className="transaction-main cursor-pointer" onClick={() => setExpanded(!expanded)}>
           <div className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 shadow-xs">
             <Layers3 size={18} />
           </div>
 
-          <div className="min-w-0 flex-1 overflow-hidden">
-            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 mb-1 overflow-hidden">
+          <div className="transaction-copy">
+            <div className="transaction-title flex items-center gap-1.5 min-w-0">
               <h4 className="font-bold text-sm text-foreground truncate min-w-0 shrink block" title={sharedName}>
                 {sharedName}
               </h4>
@@ -299,7 +269,7 @@ export function GroupTransactionItem({
             </div>
 
             {/* Consistent details order: Account -> Categories -> Debt -> Time */}
-            <div className="flex items-center gap-1.5 text-[11px] text-foreground/60 min-w-0 truncate">
+            <div className="transaction-meta flex items-center gap-1.5 text-[11px] text-foreground/60 min-w-0 truncate">
               {/* 1. Account */}
               {uniqueAccountNames.length > 0 && (
                 <span className="truncate font-medium text-foreground/80">
@@ -328,14 +298,14 @@ export function GroupTransactionItem({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0 text-right ml-1 sm:ml-2">
+        <div className="transaction-trailing">
           <div>
             <p className="font-bold text-base sm:text-lg text-purple-600 dark:text-purple-400 tracking-tight whitespace-nowrap min-w-[70px]">
               {totalAmount < 0 ? '+' : '-'}{formatCurrency(Math.abs(totalAmount), settings.currency)}
             </p>
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="transaction-actions flex items-center">
             <button 
               type="button"
               onClick={() => setExpanded(!expanded)} 
@@ -348,7 +318,7 @@ export function GroupTransactionItem({
             <button 
               type="button"
               onClick={() => setIsEditing(true)} 
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/20 text-foreground/70 hover:text-foreground flex items-center justify-center transition-colors cursor-pointer" 
+              className="ui-icon-button w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-ui-section hover:bg-black/10 dark:hover:bg-white/20 text-foreground/70 hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
               title="Edit Group"
               aria-label="Edit Group"
             >
@@ -357,7 +327,7 @@ export function GroupTransactionItem({
             <button 
               type="button"
               onClick={() => setIsDeleting(true)} 
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors cursor-pointer" 
+              className="ui-icon-button w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-500 flex items-center justify-center transition-colors cursor-pointer"
               title="Delete Group"
               aria-label="Delete Group"
             >
@@ -369,7 +339,7 @@ export function GroupTransactionItem({
 
       {/* Expanded Sub-transactions Breakdown */}
       {expanded && (
-        <div className="bg-black/5 dark:bg-white/5 px-4 sm:px-6 py-3 space-y-2 border-t border-black/5 dark:border-white/5">
+        <div className="bg-ui-section px-4 sm:px-6 py-3 space-y-2 border-t border-ui-border">
           <p className="text-[9px] font-black uppercase tracking-widest opacity-40 mb-1">Sub-Transactions Details</p>
           {subtransactions.map((st, idx) => {
             const cat = categories.find(c => c.id === st.categoryId);
@@ -378,7 +348,7 @@ export function GroupTransactionItem({
             const isInc = st.type === 'income';
 
             return (
-              <div key={st.id || idx} className="flex items-center justify-between text-xs py-1.5 border-b border-black/5 dark:border-white/5 last:border-0 gap-3">
+              <div key={st.id || idx} className="flex items-center justify-between text-xs py-1.5 border-b border-ui-border last:border-0 gap-3">
                 <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
                   <span className="font-semibold truncate text-foreground/90">
                     {cat?.label || 'Uncategorized'}
@@ -413,44 +383,10 @@ export function GroupTransactionItem({
         <TransactionForm onClose={() => setIsEditing(false)} initialData={subtransactions[0]} />
       </Modal>
 
-      <Modal isOpen={isDeleting} onClose={() => setIsDeleting(false)} title="Delete Group Transaction">
-        <div className="space-y-4 py-1">
-          <div className="flex items-center gap-3 text-red-500">
-            <div className="w-10 h-10 rounded-2xl bg-red-500/10 flex items-center justify-center shrink-0">
-              <Trash2 size={20} />
-            </div>
-            <div>
-              <h3 className="font-bold text-base text-foreground">
-                Delete "{sharedName}"?
-              </h3>
-              <p className="text-xs text-red-500 font-medium">This cannot be undone.</p>
-            </div>
-          </div>
-          <p className="text-xs text-foreground/70">
-            Permanently delete this group and its {subtransactions.length} sub-transactions.
-          </p>
-          <div className="flex flex-col gap-2 pt-2">
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={deletingLoading}
-              className="w-full text-xs font-bold py-3"
-            >
-              {deletingLoading ? 'Deleting...' : 'Delete Group'}
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setIsDeleting(false)}
-              disabled={deletingLoading}
-              className="w-full text-xs font-medium py-2"
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      <ConfirmDelete open={isDeleting} onClose={() => setIsDeleting(false)} title="Delete group transaction" onConfirm={handleDelete}>
+        <p>Delete “{sharedName}” and its {subtransactions.length} sub-transactions?</p>
+        <p>This cannot be undone.</p>
+      </ConfirmDelete>
     </div>
   );
 }
@@ -559,12 +495,7 @@ export function TransactionList({ transactions }: TransactionListProps) {
       } else if (isYesterday) {
         label = 'Yesterday';
       } else {
-        label = d.toLocaleDateString(undefined, {
-          weekday: 'short',
-          month: 'short',
-          day: 'numeric',
-          year: d.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
-        });
+        label = formatDate(d, 'long');
       }
 
       const newGroup: DayGroup = {
@@ -583,10 +514,7 @@ export function TransactionList({ transactions }: TransactionListProps) {
 
   if (historyItems.length === 0) {
     return (
-      <div className="p-12 text-center opacity-30 flex flex-col items-center gap-3">
-        <AlignLeft size={36} strokeWidth={1.5} />
-        <p className="font-bold uppercase tracking-[0.2em] text-xs">No transactions</p>
-      </div>
+      <StateFeedback title="No transactions" />
     );
   }
 
@@ -596,12 +524,12 @@ export function TransactionList({ transactions }: TransactionListProps) {
         <div key={group.dayTimestamp} className="space-y-1.5">
           {/* Day Header with slight separation */}
           <div className="flex items-center justify-between px-2 pt-0.5">
-            <span className={cn(
+            <span className={"ui-section-title " + (cn(
               "text-[11px] font-bold uppercase tracking-wider",
               group.isToday 
                 ? "text-foreground font-black" 
                 : "opacity-40 text-foreground"
-            )}>
+            ))}>
               {group.label}
             </span>
             <span className="text-[10px] font-semibold opacity-30">
@@ -610,7 +538,7 @@ export function TransactionList({ transactions }: TransactionListProps) {
           </div>
 
           {/* Day Group Card */}
-          <div className="bg-white dark:bg-black/20 rounded-2xl border border-black/5 dark:border-white/5 divide-y divide-black/5 dark:divide-white/5 overflow-hidden shadow-xs">
+          <div className="bg-ui-surface rounded-2xl border border-ui-border divide-y divide-black/5 dark:divide-white/5 overflow-hidden shadow-xs">
             {group.items.map(item => {
               if (item.type === 'single') {
                 return <TransactionItem key={item.transaction.id} transaction={item.transaction} />;
@@ -635,7 +563,7 @@ export function TransactionList({ transactions }: TransactionListProps) {
             variant="outline"
             size="sm"
             onClick={() => setExtraLimit(prev => prev + 10)}
-            className="inline-flex items-center gap-2 text-xs font-semibold px-6 py-2.5 rounded-xl border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 text-foreground cursor-pointer transition-colors"
+            className="inline-flex items-center gap-2 text-xs font-semibold px-6 py-2.5 rounded-xl border border-ui-ink/10 hover:bg-black/5 dark:hover:bg-white/10 text-foreground cursor-pointer transition-colors"
           >
             Show 10 more
           </Button>

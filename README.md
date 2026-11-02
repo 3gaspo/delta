@@ -83,3 +83,10 @@ Delta is a beautiful, responsive, and secure personal finance application design
     ```bash
     npm run build
     ```
+
+
+## Interface partagée
+
+L'application utilise le package privé versionné `@3gaspo/app-ui` pour ses composants, styles et formats communs. Son archive est incluse dans `vendor` : `npm ci` et `npm run build` fonctionnent avec ce dépôt seul.
+
+`npm run check:ui` vérifie l'archive, le lockfile, les sources installées et les points d'entrée communs. Ce contrôle s'exécute aussi avant le build. Les sources du socle sont maintenues dans le dépôt indépendant `app-ui` ; les données, calculs, parcours et styles métier restent ici. Les formats de stockage et d'export ne sont pas modifiés par les conventions d'affichage.
