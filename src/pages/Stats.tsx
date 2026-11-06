@@ -48,7 +48,7 @@ export default function Stats() {
         // Find main account
         const acc = accounts.find(a => a.id === t.accountId);
         if (t.type !== 'transfer' && acc?.hidden) return false;
-        if (!includeDebts && acc?.type === 'debt') return false;
+        if (!includeDebts && (acc?.type === 'debt' || (t.forWhom === 'me' && t.accountId === 'external'))) return false;
         
         if (limitToAccount && limitToAccount !== 'all' && t.accountId !== limitToAccount && t.transferAccountId !== limitToAccount) return false;
         
@@ -117,7 +117,7 @@ export default function Stats() {
     const totalExpenses = flowData.reduce((sum, d) => sum + d.expenses, 0);
     const totalIncome = flowData.reduce((sum, d) => sum + d.income, 0);
 
-    const filteredForAverages = getFiltered();
+    const filteredForAverages = getFiltered().filter(t => t.forWhom !== 'others');
     const periodAverages = computeFullPeriodAverages(filteredForAverages, now, accounts);
 
     // 3. Category Data
@@ -188,6 +188,7 @@ export default function Stats() {
 
               <button 
                 type="button"
+                aria-pressed={includeDebts}
                 onClick={() => setIncludeDebts(!includeDebts)}
                 className={"ui-button " + (cn(
                   "flex items-center justify-center gap-2 px-6 py-3 rounded-2xl text-xs font-bold uppercase tracking-wider transition-all border cursor-pointer",
@@ -432,9 +433,9 @@ export default function Stats() {
             <h2 className="text-lg font-bold tracking-tight">By Category</h2>
           </div>
           <Card className="p-0 overflow-hidden">
-            <div className="flex flex-col lg:flex-row">
+            <div className="flex flex-col">
               {/* Chart Side */}
-              <div className="p-8 border-b lg:border-b-0 lg:border-r border-ui-border flex flex-col items-center justify-center bg-black/[0.02] dark:bg-white/[0.02] lg:w-1/2">
+              <div className="p-8 border-b border-ui-border flex flex-col items-center justify-center bg-black/[0.02] dark:bg-white/[0.02] w-full">
                 <div className="ui-chart w-full max-w-[280px] aspect-square">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -465,34 +466,22 @@ export default function Stats() {
               </div>
 
               {/* List Side */}
-              <div className="p-6 sm:p-8 flex flex-col min-h-[380px] lg:w-1/2">
+              <div className="p-4 sm:p-6 flex flex-col min-w-0 w-full">
                 <div className="flex items-center justify-between mb-6 pb-3 border-b border-ui-border shrink-0">
                   <p className="text-[10px] font-bold uppercase tracking-widest opacity-40">Monthly Budget Progress</p>
                 </div>
-                <div className="flex-1 overflow-y-auto pr-2 -mr-2 custom-scrollbar">
+                <div className="min-w-0">
                   <div className="space-y-6">
                     {stats.categoryTotals.map((cat, i) => (
                       <div key={`${cat.name}-${i}`} className="space-y-2.5 group">
-                        <div className="flex justify-between items-end text-[10px] font-bold uppercase tracking-wider">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-2.5 h-2.5 rounded-full shadow-xs shrink-0" style={{ backgroundColor: cat.color }} />
-                            <div className="flex flex-col gap-0.5">
-                               <span className="opacity-90 truncate max-w-[180px] font-bold">{cat.name}</span>
-                               <span className="text-[8px] opacity-40 font-semibold">
-                                 Current Month • Avg: {cat.monthlyAvg !== null ? `${formatCurrency(cat.monthlyAvg, settings.currency)}/mo` : '—'}
-                               </span>
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end gap-0.5">
-                            <span className={cn("text-[11px] font-bold", cat.value > cat.budget && cat.budget > 0 ? "text-red-500" : "")}>
-                              {formatCurrency(cat.value, settings.currency)}
-                            </span>
-                            {cat.budget > 0 && (
-                              <span className="text-[9px] opacity-40">
-                                / {formatCurrency(cat.budget, settings.currency)}
-                              </span>
-                            )}
-                          </div>
+                        <div className="budget-summary">
+                          <span className="ui-field-label budget-name" title={cat.name}>{cat.name}</span>
+                          <span className={cn("budget-value text-sm font-bold", cat.value > cat.budget && cat.budget > 0 && "text-red-500")}>
+                            {formatCurrency(cat.value, settings.currency)}
+                            {cat.budget > 0 && <span className="text-foreground/60 font-medium"> / {formatCurrency(cat.budget, settings.currency)}</span>}
+                          </span>
+                          <span className="budget-caption ui-meta">Current month</span>
+                          <span className="budget-average ui-meta">Avg: {cat.monthlyAvg !== null ? `${formatCurrency(cat.monthlyAvg, settings.currency)}/mo` : '—'}</span>
                         </div>
                         <div className="h-2 w-full bg-ui-section rounded-full overflow-hidden">
                           <div 

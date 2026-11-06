@@ -117,7 +117,7 @@ export function AccountReorderModal({ isOpen, onClose }: AccountReorderModalProp
   ) => {
     const balance = getAccountBalance(account.id, transactions, account);
     const isDebt = account.type === 'debt';
-    const isReceivable = account.debtDirection === 'receivable';
+    const isReceivable = balance >= 0;
     const isDragging = draggedItemId === account.id;
     const isDragOver = dragOverItemId === account.id;
 

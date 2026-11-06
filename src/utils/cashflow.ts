@@ -1,5 +1,5 @@
 import { Account, Transaction, RecurringTransaction } from '../types';
-import { getAccountBalance, isInitialBalanceTx } from './financial';
+import { getAccountBalance, isInitialBalanceTx, getTransactionAccountDelta } from './financial';
 import { calculateNextDueDate, getNextPeriodDate } from './recurring';
 
 export interface ProjectedStep {
@@ -72,36 +72,13 @@ export function computeAccountCashflowAlert(
     t.date <= horizonDate &&
     t.status !== 'hidden' &&
     !isInitialBalanceTx(t) &&
-    (t.accountId === account.id || t.transferAccountId === account.id)
+    (t.accountId === account.id || t.transferAccountId === account.id || t.debtAccountId === account.id)
   ));
 
   const events: ProjectedEvent[] = [];
 
   for (const t of futureDiscreteTxs) {
-    let delta = 0;
-    if (account.type === 'regular') {
-      if (t.accountId === account.id) {
-        if (t.type === 'expense' || t.type === 'transfer' || t.type === 'subscription') {
-          delta = -t.amount;
-        } else if (t.type === 'income') {
-          delta = +t.amount;
-        }
-      } else if (t.transferAccountId === account.id) {
-        delta = +t.amount;
-      }
-    } else {
-      // For debt accounts
-      const isReceivable = account.debtDirection === 'receivable';
-      if (t.accountId === account.id) {
-        if (isReceivable) {
-          delta = t.type === 'expense' ? +t.amount : -t.amount;
-        } else {
-          delta = t.type === 'income' ? +t.amount : -t.amount;
-        }
-      } else if (t.transferAccountId === account.id) {
-        delta = isReceivable ? +t.amount : -t.amount;
-      }
-    }
+    const delta = getTransactionAccountDelta(account.id, t, account);
 
     events.push({
       id: t.id,
@@ -119,7 +96,7 @@ export function computeAccountCashflowAlert(
   const activeRecurring = (recurringTransactions || []).filter(r => (
     r.active !== false &&
     r.periodicityDays > 0 &&
-    (r.accountId === account.id || r.transferAccountId === account.id)
+    (r.accountId === account.id || r.transferAccountId === account.id || r.debtAccountId === account.id)
   ));
 
   for (const rule of activeRecurring) {
@@ -148,25 +125,7 @@ export function computeAccountCashflowAlert(
       });
 
       if (!alreadyLogged) {
-        let delta = 0;
-        if (account.type === 'regular') {
-          if (rule.accountId === account.id) {
-            if (rule.type === 'expense' || rule.type === 'transfer') {
-              delta = -rule.amount;
-            } else if (rule.type === 'income') {
-              delta = +rule.amount;
-            }
-          } else if (rule.transferAccountId === account.id) {
-            delta = +rule.amount;
-          }
-        } else {
-          const isReceivable = account.debtDirection === 'receivable';
-          if (rule.accountId === account.id) {
-            delta = isReceivable ? (rule.type === 'expense' ? +rule.amount : -rule.amount) : (rule.type === 'income' ? +rule.amount : -rule.amount);
-          } else if (rule.transferAccountId === account.id) {
-            delta = isReceivable ? +rule.amount : -rule.amount;
-          }
-        }
+        const delta = getTransactionAccountDelta(account.id, { ...rule, date: occDate, categoryId: rule.categoryId || '' } as Transaction, account);
 
         events.push({
           id: `rec-${rule.id}-${occDate}`,

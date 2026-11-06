@@ -1,5 +1,5 @@
 import { ConfirmDelete } from '@3gaspo/app-ui/ConfirmDelete';
-import { formatTime, formatDate } from '@3gaspo/app-ui/formats';
+import { formatDate } from '@3gaspo/app-ui/formats';
 import { StateFeedback } from '../StateFeedback';
 import React, { useState } from 'react';
 import { Transaction } from '../../types';
@@ -45,12 +45,6 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
     }
   };
 
-  const txDate = new Date(transaction.date);
-  const hasSpecificTime = txDate.getHours() !== 0 || txDate.getMinutes() !== 0 || txDate.getSeconds() !== 0;
-  const timeFormatted = hasSpecificTime 
-    ? formatTime(txDate)
-    : null;
-
   return (
     <div className={cn(
       "transaction-row border-b border-ui-border last:border-0 group transition-opacity",
@@ -95,16 +89,16 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
             )}
           </div>
 
-          {/* Consistent details order: Account -> Category -> Debt -> Time */}
+          {/* Consistent details order: Account -> Category -> Debt */}
           <div className="transaction-meta flex items-center gap-1.5 text-[11px] text-foreground/60 min-w-0 truncate">
             {/* 1. Account (Always first) */}
             {isTransfer ? (
               <span className="truncate font-medium text-foreground/80 flex items-center gap-1">
-                {account?.name || 'Account'}{account?.isShared && <Users size={10} className="text-sky-500 shrink-0" />} → {transferAccount?.name || 'Account'}{transferAccount?.isShared && <Users size={10} className="text-sky-500 shrink-0" />}
+                {account?.name || (transaction.accountId === 'external' ? 'External' : 'Account')}{account?.isShared && <Users size={10} className="text-sky-500 shrink-0" />} → {transferAccount?.name || 'Account'}{transferAccount?.isShared && <Users size={10} className="text-sky-500 shrink-0" />}
               </span>
             ) : (
               <span className="truncate font-medium text-foreground/80 inline-flex items-center gap-1">
-                {account?.name || 'Account'}
+                {account?.name || (transaction.accountId === 'external' ? 'External' : 'Account')}
                 {account?.isShared && <Users size={10} className="text-sky-500 shrink-0" title="Shared Account" />}
               </span>
             )}
@@ -125,18 +119,12 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
                 <span className="opacity-25 shrink-0 text-[10px]">|</span>
                 <span className="truncate text-purple-600 dark:text-purple-400 font-semibold inline-flex items-center gap-1 shrink-0">
                   <HandCoins size={11} className="shrink-0" />
-                  {debtAccount.debtDirection === 'receivable' ? `Owed by ${debtAccount.name}` : `Owed to ${debtAccount.name}`}
+                  {debtAccount.name}
                 </span>
               </>
             )}
 
-            {/* 4. Time */}
-            {timeFormatted && (
-              <>
-                <span className="opacity-25 shrink-0 text-[10px]">|</span>
-                <span className="shrink-0 text-[10px] opacity-40 font-mono">{timeFormatted}</span>
-              </>
-            )}
+
           </div>
         </div>
       </div>
@@ -152,8 +140,8 @@ export function TransactionItem({ transaction }: { transaction: Transaction; key
             {isIncome ? '+' : isTransfer ? '' : '-'}{formatCurrency(transaction.amount, settings.currency)}
           </p>
           {transaction.myShareAmount !== undefined && transaction.myShareAmount !== transaction.amount && (
-            <span className="text-[10px] font-bold text-foreground/50 block">
-              My share: {formatCurrency(transaction.myShareAmount, settings.currency)}
+            <span className="transaction-share text-[10px] font-bold text-foreground/60 block">
+              Me: {formatCurrency(transaction.myShareAmount, settings.currency)}
             </span>
           )}
         </div>
@@ -207,7 +195,6 @@ export function GroupTransactionItem({
   const [deletingLoading, setDeletingLoading] = useState(false);
 
   const sharedName = subtransactions[0]?.name || 'Group Transaction';
-  const sharedDate = subtransactions[0]?.date || Date.now();
 
   const totalAmount = subtransactions.reduce((sum, st) => {
     if (st.type === 'income') return sum - st.amount;
@@ -222,7 +209,7 @@ export function GroupTransactionItem({
 
   const uniqueAccountNames = Array.from(new Set(
     subtransactions
-      .map(st => accounts.find(a => a.id === st.accountId)?.name)
+      .map(st => accounts.find(a => a.id === st.accountId)?.name || (st.accountId === 'external' ? 'External' : ''))
       .filter(Boolean)
   ));
 
@@ -244,12 +231,6 @@ export function GroupTransactionItem({
     }
   };
 
-  const grpDate = new Date(sharedDate);
-  const hasSpecificTime = grpDate.getHours() !== 0 || grpDate.getMinutes() !== 0 || grpDate.getSeconds() !== 0;
-  const timeFormatted = hasSpecificTime 
-    ? formatTime(grpDate)
-    : null;
-
   return (
     <div className="border-b border-ui-border last:border-0">
       <div className="transaction-row transaction-row--group group transition-colors hover:bg-purple-500/5">
@@ -268,7 +249,7 @@ export function GroupTransactionItem({
               </span>
             </div>
 
-            {/* Consistent details order: Account -> Categories -> Debt -> Time */}
+            {/* Consistent details order: Account -> Categories */}
             <div className="transaction-meta flex items-center gap-1.5 text-[11px] text-foreground/60 min-w-0 truncate">
               {/* 1. Account */}
               {uniqueAccountNames.length > 0 && (
@@ -287,13 +268,7 @@ export function GroupTransactionItem({
                 </>
               )}
 
-              {/* 3. Time */}
-              {timeFormatted && (
-                <>
-                  <span className="opacity-25 shrink-0 text-[10px]">|</span>
-                  <span className="shrink-0 text-[10px] opacity-40 font-mono">{timeFormatted}</span>
-                </>
-              )}
+
             </div>
           </div>
         </div>
@@ -351,15 +326,15 @@ export function GroupTransactionItem({
               <div key={st.id || idx} className="flex items-center justify-between text-xs py-1.5 border-b border-ui-border last:border-0 gap-3">
                 <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
                   <span className="font-semibold truncate text-foreground/90">
-                    {cat?.label || 'Uncategorized'}
+                    {st.forWhom === 'others' ? 'For others' : cat?.label || 'Uncategorized'}
                   </span>
                   <span className="text-[10px] opacity-50 truncate inline-flex items-center gap-0.5">
-                    ({acc?.name})
+                    ({acc?.name || (st.accountId === 'external' ? 'External' : 'Account')})
                     {acc?.isShared && <Users size={10} className="text-sky-500 shrink-0" title="Shared Account" />}
                   </span>
                   {stDebtAcc && (
                     <span className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 bg-purple-500/10 px-1.5 py-0.5 rounded flex items-center gap-1 shrink-0">
-                      <HandCoins size={11} /> {stDebtAcc.debtDirection === 'receivable' ? `Owed by ${stDebtAcc.name}` : `Owed to ${stDebtAcc.name}`}
+                      <HandCoins size={11} /> {stDebtAcc.name}
                     </span>
                   )}
                 </div>
@@ -369,7 +344,7 @@ export function GroupTransactionItem({
                   </span>
                   {st.myShareAmount !== undefined && st.myShareAmount !== st.amount && (
                     <span className="text-[9px] font-bold text-foreground/50 block">
-                      My share: {formatCurrency(st.myShareAmount, settings.currency)}
+                      Me: {formatCurrency(st.myShareAmount, settings.currency)}
                     </span>
                   )}
                 </div>

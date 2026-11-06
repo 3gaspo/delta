@@ -8,6 +8,7 @@ import { Transaction, Account, Category, Tag, RecurringTransaction } from '../ty
  * Otherwise uses the shared account default, or the full amount for a personal account.
  */
 export function getMyTransactionAmount(t: Transaction, accounts: Account[] = []): number {
+  if (t.forWhom) return t.forWhom === 'me' ? t.amount : 0;
   if (typeof t.myShareAmount === 'number' && !isNaN(t.myShareAmount)) {
     return t.myShareAmount;
   }
@@ -49,91 +50,42 @@ export function isInitialBalanceTx(t: Transaction): boolean {
   );
 }
 
+/** Legacy payable accounts stored a positive amount owed; expose a signed ledger. */
+export function normalizeDebtAccount(account: Account): Account {
+  if (account.type !== 'debt' || account.debtBalanceVersion === 2) return account;
+  return { ...account, initialBalance: account.initialBalance === undefined ? undefined : account.initialBalance * (account.debtDirection === 'payable' ? -1 : 1), debtBalanceVersion: 2 };
+}
+
+export function getTransactionAccountDelta(accountId: string, t: Transaction, account?: Account): number {
+  if (t.status === 'hidden' || isInitialBalanceTx(t)) return 0;
+  if (t.type === 'transfer' && account?.type === 'debt' && account.debtDirection === 'payable' && t.debtTransferVersion !== 2) {
+    if (t.accountId === accountId) return t.amount;
+  }
+  if (t.debtAccountId === accountId) {
+    if (t.forWhom) {
+      if (t.accountId === 'external') return t.forWhom === 'me' ? -t.amount : 0;
+      return t.forWhom === 'others' ? t.amount : 0;
+    }
+    return t.type === 'expense' ? t.amount : t.type === 'income' ? -t.amount : 0;
+  }
+  if (t.accountId === accountId) {
+    if (account?.type === 'debt') return t.type === 'expense' ? t.amount : -t.amount;
+    return t.type === 'income' ? t.amount : -t.amount;
+  }
+  return t.transferAccountId === accountId ? t.amount : 0;
+}
+
 export function getAccountBalance(
-  accountId: string, 
+  accountId: string,
   transactions: Transaction[],
   accountOrInitialBalance?: Account | number | Account[]
 ): number {
-  let initialOffset = 0;
-  let targetAccount: Account | undefined;
-
-  if (typeof accountOrInitialBalance === 'number') {
-    initialOffset = accountOrInitialBalance;
-  } else if (accountOrInitialBalance && typeof accountOrInitialBalance === 'object') {
-    if ('initialBalance' in accountOrInitialBalance) {
-      targetAccount = accountOrInitialBalance as Account;
-      initialOffset = targetAccount.initialBalance || 0;
-    } else if (Array.isArray(accountOrInitialBalance)) {
-      targetAccount = accountOrInitialBalance.find(a => a.id === accountId);
-      initialOffset = targetAccount?.initialBalance || 0;
-    }
-  }
-
-  const isDebt = targetAccount?.type === 'debt';
-  const isReceivable = targetAccount?.debtDirection === 'receivable';
-
-  const txSum = transactions
-    .filter(t => t.status !== 'hidden' && (
-      t.accountId === accountId || 
-      t.transferAccountId === accountId || 
-      t.debtAccountId === accountId
-    ))
-    .filter(t => !isInitialBalanceTx(t))
-    .reduce((acc, t) => {
-      // 1. Transaction is linked to this debt account via debtAccountId
-      if (t.debtAccountId === accountId) {
-        if (isReceivable) {
-          // Expense paid for friend -> friend owes me more (+amount)
-          // Income received from friend -> friend repaid part of debt (-amount)
-          return t.type === 'expense' ? acc + t.amount : t.type === 'income' ? acc - t.amount : acc;
-        } else {
-          // Payable (I owe them):
-          // Income received from them (borrowed money) -> I owe more (+amount)
-          // Expense paid to them (repayment) -> I owe less (-amount)
-          return t.type === 'income' ? acc + t.amount : t.type === 'expense' ? acc - t.amount : acc;
-        }
-      }
-
-      // 2. This account is the primary accountId
-      if (t.accountId === accountId) {
-        if (isDebt) {
-          if (isReceivable) {
-            if (t.type === 'expense') return acc + t.amount;
-            if (t.type === 'income') return acc - t.amount;
-            if (t.type === 'transfer') return acc - t.amount;
-          } else {
-            if (t.type === 'income') return acc + t.amount;
-            if (t.type === 'expense') return acc - t.amount;
-            if (t.type === 'transfer') return acc - t.amount;
-          }
-        } else {
-          // Regular account
-          if (t.type === 'income') return acc + t.amount;
-          if (t.type === 'expense' || t.type === 'subscription') return acc - t.amount;
-          if (t.type === 'transfer') return acc - t.amount;
-        }
-      }
-
-      // 3. Transfer where this account is transferAccountId (destination)
-      if (t.transferAccountId === accountId) {
-        if (isDebt) {
-          if (isReceivable) {
-            // Transfer into receivable -> loaning more money -> debt increases (+amount)
-            return acc + t.amount;
-          } else {
-            // Transfer into payable -> repayment of debt -> debt reduces (-amount)
-            return acc - t.amount;
-          }
-        } else {
-          // Regular account receiving transfer
-          return acc + t.amount;
-        }
-      }
-
-      return acc;
-    }, 0);
-
-  return initialOffset + txSum;
+  const rawAccount = typeof accountOrInitialBalance === 'object'
+    ? Array.isArray(accountOrInitialBalance) ? accountOrInitialBalance.find(a => a.id === accountId) : accountOrInitialBalance
+    : undefined;
+  const account = rawAccount ? normalizeDebtAccount(rawAccount) : undefined;
+  const initial = typeof accountOrInitialBalance === 'number' ? accountOrInitialBalance : account?.initialBalance || 0;
+  return Math.round((initial + transactions.reduce((sum, t) => sum + getTransactionAccountDelta(accountId, t, account), 0)) * 100) / 100;
 }
 
 export interface FinancialTotals {
@@ -161,11 +113,8 @@ export function computeFinancialTotals(accounts: Account[], transactions: Transa
     if (account.type === 'regular') {
       regularBalance += bal;
     } else if (account.type === 'debt') {
-      if (account.debtDirection === 'receivable') {
-        receivables += bal;
-      } else if (account.debtDirection === 'payable') {
-        payables += bal;
-      }
+      receivables += Math.max(0, bal);
+      payables += Math.max(0, -bal);
     }
   });
 
@@ -208,21 +157,21 @@ export function getStatsAggregation(
     return true;
   });
 
-  const nonInitial = filtered.filter(t => !isInitialBalanceTx(t));
+  const nonInitial = filtered.filter(t => !isInitialBalanceTx(t) && t.forWhom !== 'others');
 
   const income = nonInitial.filter(t => t.type === 'income').reduce((sum, t) => sum + getMyTransactionAmount(t, accounts), 0);
   const expenses = nonInitial.filter(t => t.type === 'expense').reduce((sum, t) => sum + getMyTransactionAmount(t, accounts), 0);
   const netFlow = income - expenses;
 
   const byCategory = nonInitial
-    .filter(t => t.type === 'expense')
+    .filter(t => t.type === 'expense' && t.forWhom !== 'others')
     .reduce((acc, t) => {
       acc[t.categoryId] = (acc[t.categoryId] || 0) + getMyTransactionAmount(t, accounts);
       return acc;
     }, {} as Record<string, number>);
 
   const byTag = filtered
-    .filter(t => t.type === 'expense')
+    .filter(t => t.type === 'expense' && t.forWhom !== 'others')
     .reduce((acc, t) => {
       const myAmt = getMyTransactionAmount(t, accounts);
       t.tagIds.forEach(tagId => {
@@ -431,7 +380,7 @@ export function computeFullPeriodAverages(
     categoryMonthlyAvg: {}
   };
 
-  const validTxs = (transactions || []).filter(t => t.status !== 'hidden' && !isInitialBalanceTx(t));
+  const validTxs = (transactions || []).filter(t => t.status !== 'hidden' && t.forWhom !== 'others' && !isInitialBalanceTx(t));
   if (validTxs.length === 0) {
     return emptyResult;
   }

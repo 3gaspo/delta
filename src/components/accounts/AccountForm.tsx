@@ -2,7 +2,7 @@ import { ACTIONS } from '@3gaspo/app-ui/labels';
 import { ValidatedForm } from '../ValidatedForm';
 import React, { useState, useMemo, useId } from 'react';
 import { useData } from '../../providers/DataProvider';
-import { Account, AccountType, DebtDirection } from '../../types';
+import { Account, AccountType } from '../../types';
 import { DialogActions } from '../Dialog';
 import { Button, Input, Select } from '../ui/Base';
 import { Landmark, Archive, Wallet, EyeOff, AlertCircle, Trash2, Calculator, Users } from 'lucide-react';
@@ -22,7 +22,6 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
   const [formData, setFormData] = useState({
     name: initialData?.name || '',
     type: initialData?.type || ('regular' as AccountType),
-    debtDirection: initialData?.debtDirection || ('payable' as DebtDirection),
     archived: initialData?.archived || false,
     hidden: initialData?.hidden || false,
     initialBalance: initialData?.initialBalance !== undefined ? initialData.initialBalance.toString() : '0',
@@ -75,7 +74,7 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
         submission.isShared = formData.isShared;
         submission.defaultMyShareRatio = formData.isShared ? formData.defaultMyShareRatio : 1.0;
       } else if (formData.type === 'debt') {
-        submission.debtDirection = formData.debtDirection;
+        submission.debtBalanceVersion = 2;
         submission.isShared = false;
       }
 
@@ -225,7 +224,7 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-4">
+        <div>
           <label className="ui-field-label block">
             <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Type</span>
             <Select 
@@ -236,19 +235,10 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
               <option value="debt">Debt Account</option>
             </Select>
           </label>
-          {formData.type === 'debt' && (
-            <label className="ui-field-label block">
-              <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Direction</span>
-              <Select 
-                value={formData.debtDirection}
-                onChange={e => setFormData({ ...formData, debtDirection: e.target.value as DebtDirection })}
-              >
-                <option value="payable">I owe this (Payable)</option>
-                <option value="receivable">I am owed (Receivable)</option>
-              </Select>
-            </label>
-          )}
+
         </div>
+
+        {formData.type === 'debt' && <p className="ui-meta">Positive: owed to you. Negative: you owe.</p>}
 
         {formData.type === 'regular' && (
           <div className="p-4 bg-ui-section rounded-2xl space-y-3 border border-ui-border">
@@ -276,8 +266,8 @@ export function AccountForm({ onClose, initialData, initialDeleteConfirm = false
                 </span>
                 <div className="flex items-center gap-2">
                   {[
-                    { label: '50% (Half)', val: 0.5 },
-                    { label: '100% (Mine)', val: 1.0 },
+                    { label: '50%', val: 0.5 },
+                    { label: '100%', val: 1.0 },
                     { label: 'Custom', val: 'custom' }
                   ].map(opt => {
                     const isSelected = opt.val === 'custom' 

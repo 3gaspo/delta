@@ -131,7 +131,7 @@ export default function Accounts() {
             {formatCurrency(currentAssets, settings.currency)}
           </p>
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-40 mt-4 sm:mt-0 sm:col-start-2 sm:row-start-1">
-            Net Worth <span className="text-[9px] tracking-normal">(End of Month)</span>
+            Net Worth <span className="text-[9px] tracking-normal">(Monthly Plan)</span>
           </p>
           <p className={cn(
             "text-2xl font-black tracking-tighter min-w-0 whitespace-nowrap sm:col-start-2 sm:row-start-2",

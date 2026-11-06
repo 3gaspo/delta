@@ -8,6 +8,7 @@ export interface Account {
   name: string;
   type: AccountType;
   debtDirection?: DebtDirection;
+  debtBalanceVersion?: 2;
   initialBalance?: number;
   createdAt: number;
   updatedAt: number;
@@ -44,11 +45,15 @@ export interface Transaction {
   isCorrection?: boolean;
   isInitialBalance?: boolean;
   groupId?: string;
+  forWhom?: 'me' | 'others';
+  splitWeight?: number;
+  debtTransferVersion?: 2;
   myShareAmount?: number;
   myShareRatio?: number;
 }
 
 export interface RecurringTransaction {
+  debtTransferVersion?: 2;
   id: string;
   name: string;
   amount: number;
@@ -89,6 +94,7 @@ export interface Tag {
 }
 
 export interface UserSettings {
+  defaultAccountsVersion?: 1;
   darkMode: boolean;
   currency: string;
   initialized: boolean;

@@ -1,3 +1,4 @@
+import { splitGroupTotal } from '../../utils/groupExpenses';
 import { ACTIONS } from '@3gaspo/app-ui/labels';
 import { ValidatedForm } from '../ValidatedForm';
 import React, { useState, useMemo, useId } from 'react';
@@ -24,15 +25,14 @@ interface TransactionFormProps {
 
 interface SubTransactionItem {
   id?: string;
+  forWhom?: 'me' | 'others';
+  status?: TransactionStatus;
+  weight?: string;
   amount: string;
-  type: 'expense' | 'income';
-  accountId: string;
   categoryId: string;
   tagsInput: string;
   description: string;
   debtAccountId?: string;
-  myShareRatio?: number;
-  myShareAmount?: string;
 }
 
 export function TransactionForm({ onClose, initialData, initialRecurringData, defaultMode, allowedModes }: TransactionFormProps) {
@@ -209,44 +209,41 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
 
   // Group transaction sub-transactions state
   const defaultSubCat = availableCategories.find(c => c.label === 'Uncategorized')?.id || availableCategories[0]?.id || '';
-  const defaultAcc = accounts[0]?.id || '';
+  const defaultAcc = regularAccounts.find(a => !a.archived)?.id || 'external';
+  const [groupAccountId, setGroupAccountId] = useState(existingGroupSubtransactions[0]?.accountId || defaultAcc);
+  const [groupTotal, setGroupTotal] = useState(existingGroupSubtransactions.length ? existingGroupSubtransactions.reduce((n, t) => n + t.amount, 0).toFixed(2) : '');
+  const [splitMode, setSplitMode] = useState<'amount' | 'ratio'>(existingGroupSubtransactions.length && existingGroupSubtransactions.every(t => t.splitWeight) ? 'ratio' : 'amount');
 
   const [subTransactions, setSubTransactions] = useState<SubTransactionItem[]>(() => {
     if (existingGroupSubtransactions.length > 0) {
       return existingGroupSubtransactions.map(t => ({
         id: t.id,
+        forWhom: t.forWhom || 'me',
+        status: t.status,
+        weight: String(t.splitWeight || 1),
         amount: t.amount.toString(),
-        type: (t.type === 'income' ? 'income' : 'expense'),
-        accountId: t.accountId,
         categoryId: t.categoryId || defaultSubCat,
         tagsInput: t.tagIds.map(tid => tags.find(tg => tg.id === tid)?.label).filter(Boolean).join(', '),
         description: t.description || '',
         debtAccountId: t.debtAccountId || '',
-        myShareRatio: t.myShareRatio,
-        myShareAmount: t.myShareAmount !== undefined ? t.myShareAmount.toString() : ''
       }));
     }
     return [
-      { amount: '', type: 'expense', accountId: defaultAcc, categoryId: defaultSubCat, tagsInput: '', description: '', debtAccountId: '', myShareRatio: accounts.find(a => a.id === defaultAcc)?.defaultMyShareRatio ?? 0.5, myShareAmount: '' },
-      { amount: '', type: 'expense', accountId: defaultAcc, categoryId: defaultSubCat, tagsInput: '', description: '', debtAccountId: '', myShareRatio: accounts.find(a => a.id === defaultAcc)?.defaultMyShareRatio ?? 0.5, myShareAmount: '' }
+      { amount: '', forWhom: 'me', weight: '1', categoryId: defaultSubCat, tagsInput: '', description: '', debtAccountId: '' },
+      { amount: '', forWhom: 'others', weight: '1', categoryId: defaultSubCat, tagsInput: '', description: '', debtAccountId: '' }
     ];
   });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const groupTotalAmount = useMemo(() => {
-    return subTransactions.reduce((sum, st) => {
-      const val = parseMoney(st.amount);
-      return sum + (isNaN(val) ? 0 : val);
-    }, 0);
-  }, [subTransactions]);
+  const groupAmounts = useMemo(() => splitMode === 'ratio'
+    ? splitGroupTotal(parseMoney(groupTotal), subTransactions.map(st => parseMoney(st.weight ?? '1')))
+    : subTransactions.map(st => parseMoney(st.amount)), [splitMode, groupTotal, subTransactions]);
+  const groupTotalAmount = groupAmounts.reduce((sum, n) => sum + n, 0);
 
   const handleAddSubTransaction = () => {
-    setSubTransactions([
-      ...subTransactions,
-      { amount: '', type: 'expense', accountId: defaultAcc, categoryId: defaultSubCat, tagsInput: '', description: '', debtAccountId: '' }
-    ]);
+    setSubTransactions([...subTransactions, { amount: '', weight: '1', forWhom: 'others', categoryId: defaultSubCat, tagsInput: '', description: '', debtAccountId: '' }]);
   };
 
   const handleRemoveSubTransaction = (index: number) => {
@@ -328,20 +325,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
       ).getTime();
     }
 
-    // For brand new transactions:
-    const isToday = (
-      year === now.getFullYear() &&
-      (month - 1) === now.getMonth() &&
-      day === now.getDate()
-    );
-
-    if (isToday) {
-      // New transaction added for today uses current time
-      return Date.now();
-    }
-
-    // For new transactions added on a past or future date, use start of day (00:00:00) so no artificial noon is added
-    return new Date(year, month - 1, day, 0, 0, 0, 0).getTime();
+    // Keep the creation time on the selected local calendar day for ordering.
+    return new Date(year, month - 1, day, now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds()).getTime();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -400,39 +385,25 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
         const sharedDate = computeManualDate(formData.date);
         const groupId = initialData?.groupId || crypto.randomUUID();
 
+        if (groupAccountId !== 'external' && !regularAccounts.some(a => a.id === groupAccountId)) throw new Error('Choose a payment account');
+        if (splitMode === 'ratio' && parseMoney(groupTotal) <= 0) throw new Error('Enter a total to split by ratio');
+        if (groupTotal.trim() && (parseMoney(groupTotal) <= 0 || Math.round(groupTotalAmount * 100) !== Math.round(parseMoney(groupTotal) * 100))) throw new Error('The expenses must add up to the total');
         const preparedSubtransactions = [];
         for (let i = 0; i < subTransactions.length; i++) {
           const st = subTransactions[i];
-          const amt = parseMoney(st.amount);
-          if (amt <= 0) throw new Error(`Sub-transaction #${i + 1} has an invalid amount`);
-          if (!st.accountId) throw new Error(`Sub-transaction #${i + 1} requires an account`);
-
-          const stTagIds = await processTags(st.tagsInput);
-
-          const subTx: any = {
-            id: st.id,
-            groupId,
-            name: formData.name.trim(),
-            amount: amt,
-            date: sharedDate,
-            accountId: st.accountId,
-            categoryId: st.categoryId,
-            tagIds: stTagIds,
-            type: st.type,
-            status: formData.status,
-            description: st.description.trim()
-          };
-          if (st.debtAccountId) {
-            subTx.debtAccountId = st.debtAccountId;
-          }
-          const stAcc = accounts.find(a => a.id === st.accountId);
-          if (stAcc?.isShared) {
-            const parsedShare = parseMoney(st.myShareAmount || '');
-            const ratio = st.myShareRatio ?? stAcc.defaultMyShareRatio ?? 0.5;
-            subTx.myShareAmount = parsedShare >= 0 && st.myShareAmount ? parsedShare : amt * ratio;
-            subTx.myShareRatio = ratio;
-          }
-          preparedSubtransactions.push(subTx);
+          const amt = groupAmounts[i];
+          if (amt <= 0) throw new Error(`Expense #${i + 1} needs a positive amount`);
+          if (!debtAccounts.some(a => a.id === st.debtAccountId)) throw new Error(`Expense #${i + 1} needs a debt account`);
+          const forWhom = st.forWhom || 'me';
+          preparedSubtransactions.push({
+            id: st.id, groupId, name: formData.name.trim(), amount: amt, date: sharedDate,
+            accountId: groupAccountId, debtAccountId: st.debtAccountId, forWhom,
+            categoryId: forWhom === 'me' ? st.categoryId : '',
+            tagIds: forWhom === 'me' ? await processTags(st.tagsInput) : [],
+            type: 'expense', status: forWhom === 'me' ? st.status || 'normal' : 'normal',
+            description: st.description.trim(),
+            ...(splitMode === 'ratio' ? { splitWeight: parseMoney(st.weight ?? '1') } : {}),
+          });
         }
 
         if (initialRecurringData) {
@@ -475,6 +446,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             categoryId: '',
             tagIds: finalTagIds,
             type: 'transfer' as const,
+            debtTransferVersion: initialRecurringData?.debtTransferVersion ?? (initialRecurringData ? undefined : 2 as const),
             status: formData.status,
             description: formData.description.trim(),
             periodicityDays: periodNum,
@@ -502,6 +474,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             categoryId: '',
             tagIds: finalTagIds,
             type: 'transfer' as TransactionType,
+            debtTransferVersion: initialData?.debtTransferVersion ?? (initialData?.type === 'transfer' ? undefined : 2),
             status: formData.status,
             description: formData.description.trim()
           };
@@ -848,7 +821,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                       <optgroup label="Debt Accounts">
                         {debtAccounts.map(a => (
                           <option key={a.id} value={a.id}>
-                            {a.name} ({a.debtDirection === 'receivable' ? 'Receivable' : 'Payable'})
+                            {a.name}
                           </option>
                         ))}
                       </optgroup>
@@ -883,7 +856,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             {/* Shared Account Split Control */}
             {isSelectedAccountShared && (
               <div className="p-4 bg-sky-500/5 border border-sky-500/15 rounded-2xl space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2 text-sky-600 dark:text-sky-400">
                     <Users size={16} />
                     <span className="text-xs font-bold uppercase tracking-wider">Shared Account Split</span>
@@ -895,8 +868,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
 
                 <div className="flex items-center gap-2">
                   {[
-                    { label: '50% (Half)', ratio: 0.5 },
-                    { label: '100% (Mine)', ratio: 1.0 },
+                    { label: '50%', ratio: 0.5 },
+                    { label: '100%', ratio: 1.0 },
                     { label: 'Custom', ratio: 'custom' }
                   ].map(opt => {
                     const isSelected = opt.ratio === 'custom'
@@ -936,7 +909,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   <div>
                     <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 block mb-1">
-                      My Share (Personal Expense)
+                      My share
                     </span>
                     <Input
                       placeholder="0.00"
@@ -982,7 +955,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                   <option value="">None</option>
                   {debtAccounts.map(d => (
                     <option key={d.id} value={d.id}>
-                      {d.name} ({d.debtDirection === 'receivable' ? 'Receivable - Owed to you' : 'Payable - You owe'})
+                      {d.name}
                     </option>
                   ))}
                 </Select>
@@ -1013,316 +986,73 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
           </>
         )}
 
-        {/* ======================= TAB 2: GROUP TRANSACTION ======================= */}
-        {mode === 'group' && (
-          <>
-            <label className="ui-field-label block">
-              <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">
-                Group Title / Shared Name
-              </span>
-              <Input 
-                placeholder="e.g. IKEA Shopping, Supermarket Receipt" 
-                icon={AlignLeft}
-                value={formData.name}
-                onChange={e => setFormData({ ...formData, name: e.target.value })}
-                required
-                className="text-lg font-bold"
-              />
+        {/* Group expenses use one payer and explicit personal/debt directions. */}
+        {mode === 'group' && (<>
+          <label className="ui-field-label block">Group title
+            <Input value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} required />
+          </label>
+          <label className="ui-field-label block">Payment account
+            <Select value={groupAccountId} onChange={e => setGroupAccountId(e.target.value)} required>
+              <option value="external">External</option>
+              {regularAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </Select>
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="ui-field-label block">Date
+              <Input type="date" value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} required />
             </label>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <label className="ui-field-label block">
-                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Date</span>
-                <Input 
-                  type="date" 
-                  icon={Calendar}
-                  value={formData.date}
-                  onChange={e => setFormData({ ...formData, date: e.target.value })}
-                  required
-                />
+            <label className="ui-field-label block">Total {splitMode === 'amount' ? '(optional)' : ''}
+              <Input inputMode="decimal" placeholder="0.00" value={groupTotal} onChange={e => setGroupTotal(e.target.value)} required={splitMode === 'ratio'} />
+            </label>
+          </div>
+          <div className="ui-segments">
+            {(['amount', 'ratio'] as const).map(value => <button key={value} className="ui-option" type="button" aria-pressed={splitMode === value} onClick={() => {
+              if (value === 'amount' && splitMode === 'ratio') setSubTransactions(subTransactions.map((st, i) => ({ ...st, amount: groupAmounts[i].toFixed(2) })));
+              setSplitMode(value);
+            }}>{value === 'amount' ? 'Amounts' : 'Ratios'}</button>)}
+          </div>
+          <div className="space-y-4">
+            {subTransactions.map((st, idx) => <fieldset key={idx} className="min-w-0 p-4 bg-ui-section rounded-2xl space-y-3">
+              <legend className="ui-field-label px-1">Expense {idx + 1}</legend>
+              <div className="flex items-center gap-2">
+                <div className="ui-segments flex-1">
+                  {(['me', 'others'] as const).map(value => <button key={value} type="button" className="ui-option" aria-pressed={(st.forWhom || 'me') === value} onClick={() => handleUpdateSubTransaction(idx, { forWhom: value })}>{value === 'me' ? 'For me' : 'For others'}</button>)}
+                </div>
+                <button className="ui-icon-button text-red-500" type="button" aria-label={`Remove expense ${idx + 1}`} disabled={subTransactions.length <= 1} onClick={() => handleRemoveSubTransaction(idx)}><Trash2 size={16} /></button>
+              </div>
+              <label className="ui-field-label block">{splitMode === 'ratio' ? 'Ratio' : 'Amount'}
+                <Input inputMode="decimal" value={splitMode === 'ratio' ? st.weight ?? '1' : st.amount} onChange={e => handleUpdateSubTransaction(idx, splitMode === 'ratio' ? { weight: e.target.value } : { amount: e.target.value })} required />
               </label>
-
-              <label className="ui-field-label block">
-                <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-2 block">Status</span>
-                <Select 
-                  value={formData.status}
-                  onChange={e => setFormData({ ...formData, status: e.target.value as TransactionStatus })}
-                >
-                  <option value="normal">Normal</option>
-                  <option value="pending">Pending</option>
-                  <option value="hidden">Hidden</option>
+              {splitMode === 'ratio' && <p className="ui-meta">{formatCurrency(groupAmounts[idx], settings.currency)}</p>}
+              <label className="ui-field-label block">Debt account
+                <Select value={st.debtAccountId || ''} onChange={e => handleUpdateSubTransaction(idx, { debtAccountId: e.target.value })} required>
+                  <option value="">Choose account</option>
+                  {debtAccounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </Select>
               </label>
-            </div>
-
-            <div className="pt-2 border-t border-ui-ink/10">
-              <div className="flex justify-end mb-4">
-                <div className="bg-purple-500/10 px-4 py-2 rounded-2xl border border-purple-500/20 flex items-center gap-3">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400">Total Group Amount:</span>
-                  <span className="text-base font-black text-purple-600 dark:text-purple-400">
-                    {formatCurrency(groupTotalAmount, settings.currency)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="space-y-4 max-h-[420px] overflow-y-auto pr-1">
-                {subTransactions.map((st, idx) => (
-                  <div key={idx} className="p-4 bg-ui-section rounded-2xl border border-ui-border space-y-3 relative group/item">
-                    <div className="flex items-center justify-between pb-1 border-b border-ui-border">
-                      <span className="text-[10px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-600 dark:text-purple-300 px-2.5 py-1 rounded-md">
-                        Sub-Transaction #{idx + 1}
-                      </span>
-                      {subTransactions.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSubTransaction(idx)}
-                          className="text-red-500 opacity-60 hover:opacity-100 p-1 transition-opacity flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider"
-                          title="Remove item"
-                        >
-                          <Trash2 size={14} /> Remove
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Subtransaction Type Selector: Expense (Red) / Income (Green) */}
-                    <div>
-                      <span className="ui-section-title text-[9px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Type</span>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateSubTransaction(idx, { type: 'expense' })}
-                          className={"ui-button " + (cn(
-                            "py-2 px-3 rounded-xl font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 border transition-all",
-                            st.type === 'expense'
-                              ? "bg-red-500/15 border-red-500 text-red-600 dark:text-red-400 shadow-sm"
-                              : "bg-ui-section border-transparent text-foreground/50 hover:text-foreground"
-                          ))}
-                        >
-                          <ArrowUpRight size={14} className={st.type === 'expense' ? "text-red-500" : ""} />
-                          <span>Expense</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateSubTransaction(idx, { type: 'income' })}
-                          className={"ui-button " + (cn(
-                            "py-2 px-3 rounded-xl font-bold text-[11px] uppercase tracking-wider flex items-center justify-center gap-1.5 border transition-all",
-                            st.type === 'income'
-                              ? "bg-emerald-500/15 border-emerald-500 text-emerald-600 dark:text-emerald-400 shadow-sm"
-                              : "bg-ui-section border-transparent text-foreground/50 hover:text-foreground"
-                          ))}
-                        >
-                          <ArrowDownLeft size={14} className={st.type === 'income' ? "text-emerald-500" : ""} />
-                          <span>Income</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <label className="ui-field-label block">
-                      <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Amount</span>
-                      <Input 
-                        placeholder="0.00"
-                        value={st.amount}
-                        onChange={e => {
-                          const val = e.target.value;
-                          const stAcc = accounts.find(a => a.id === st.accountId);
-                          const ratio = st.myShareRatio ?? stAcc?.defaultMyShareRatio ?? 0.5;
-                          const parsed = parseMoney(val);
-                          handleUpdateSubTransaction(idx, { 
-                            amount: val,
-                            myShareAmount: stAcc?.isShared && parsed > 0 ? (parsed * ratio).toFixed(2) : st.myShareAmount
-                          });
-                        }}
-                        required
-                        className={cn(
-                          "font-bold",
-                          st.type === 'income' ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"
-                        )}
-                      />
-                    </label>
-
-                    <label className="ui-field-label block">
-                      <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">
-                        Account
-                      </span>
-                      <Select
-                        icon={CreditCard}
-                        value={st.accountId}
-                        onChange={e => {
-                          const newAccId = e.target.value;
-                          const newAcc = accounts.find(a => a.id === newAccId);
-                          const ratio = newAcc?.defaultMyShareRatio ?? 0.5;
-                          const parsed = parseMoney(st.amount) || 0;
-                          handleUpdateSubTransaction(idx, { 
-                            accountId: newAccId,
-                            myShareRatio: newAcc?.isShared ? ratio : undefined,
-                            myShareAmount: newAcc?.isShared && parsed > 0 ? (parsed * ratio).toFixed(2) : undefined
-                          });
-                        }}
-                        required
-                      >
-                        {accounts.length === 0 && <option value="">No Accounts Available</option>}
-                        {regularAccounts.length > 0 && debtAccounts.length > 0 ? (
-                          <>
-                            <optgroup label="Regular Accounts">
-                              {regularAccounts.map(a => (
-                                <option key={a.id} value={a.id}>
-                                  {a.name}{a.isShared ? ' (Shared)' : ''}
-                                </option>
-                              ))}
-                            </optgroup>
-                            <optgroup label="Debt Accounts">
-                              {debtAccounts.map(a => (
-                                <option key={a.id} value={a.id}>
-                                  {a.name} ({a.debtDirection === 'receivable' ? 'Receivable' : 'Payable'})
-                                </option>
-                              ))}
-                            </optgroup>
-                          </>
-                        ) : (
-                          accounts.map(a => (
-                            <option key={a.id} value={a.id}>
-                              {a.name}{a.isShared ? ' (Shared)' : ''}
-                            </option>
-                          ))
-                        )}
-                      </Select>
-                    </label>
-
-                    {/* Shared Account Split for this sub-transaction */}
-                    {accounts.find(a => a.id === st.accountId)?.isShared && (
-                      <div className="p-3 bg-sky-500/5 border border-sky-500/15 rounded-xl space-y-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-sky-600 dark:text-sky-400 flex items-center gap-1.5">
-                            <Users size={13} /> Shared Split (My Share)
-                          </span>
-                          <span className="text-[10px] font-semibold opacity-60">
-                            Item: {formatCurrency(parseMoney(st.amount) || 0, settings.currency)}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-1.5">
-                          {[
-                            { label: '50% (Half)', ratio: 0.5 },
-                            { label: '100% (Mine)', ratio: 1.0 }
-                          ].map(opt => {
-                            const stAcc = accounts.find(a => a.id === st.accountId);
-                            const currentRatio = st.myShareRatio ?? stAcc?.defaultMyShareRatio ?? 0.5;
-                            const isSelected = currentRatio === opt.ratio;
-                            return (
-                              <button
-                                key={opt.label}
-                                type="button"
-                                onClick={() => {
-                                  const amt = parseMoney(st.amount) || 0;
-                                  handleUpdateSubTransaction(idx, {
-                                    myShareRatio: opt.ratio,
-                                    myShareAmount: (amt * opt.ratio).toFixed(2)
-                                  });
-                                }}
-                                className={cn(
-                                  "px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer",
-                                  isSelected
-                                    ? "bg-sky-600 text-white"
-                                    : "bg-sky-500/10 text-sky-700 dark:text-sky-300 hover:bg-sky-500/20"
-                                )}
-                              >
-                                {opt.label}
-                              </button>
-                            );
-                          })}
-
-                          <div className="flex items-center gap-1 ml-auto">
-                            <span className="ui-section-title text-[9px] font-bold opacity-40 uppercase">My share:</span>
-                            <Input
-                              placeholder="0.00"
-                              value={st.myShareAmount ?? ''}
-                              onChange={e => {
-                                const val = e.target.value;
-                                const parsedShare = parseMoney(val);
-                                const amt = parseMoney(st.amount) || 0;
-                                handleUpdateSubTransaction(idx, {
-                                  myShareAmount: val,
-                                  myShareRatio: amt > 0 && parsedShare >= 0 ? parsedShare / amt : undefined
-                                });
-                              }}
-                              className="h-7 text-xs font-bold w-20 py-0 text-center"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    <label className="ui-field-label block">
-                      <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Category</span>
-                      <Select
-                        icon={Layers}
-                        value={st.categoryId}
-                        onChange={e => handleUpdateSubTransaction(idx, { categoryId: e.target.value })}
-                        required
-                      >
-                        {availableCategories
-                          .filter(c => (!c.type || c.type === 'both' || c.type === st.type))
-                          .map(c => (
-                            <option key={c.id} value={c.id}>{c.label}</option>
-                          ))}
-                      </Select>
-                    </label>
-
-                    <label className="ui-field-label block">
-                      <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Link to Debt</span>
-                      {debtAccounts.length > 0 ? (
-                        <Select
-                          icon={HandCoins}
-                          value={st.debtAccountId || ''}
-                          onChange={e => handleUpdateSubTransaction(idx, { debtAccountId: e.target.value })}
-                        >
-                          <option value="">None</option>
-                          {debtAccounts.map(d => (
-                            <option key={d.id} value={d.id}>
-                              {d.name} ({d.debtDirection === 'receivable' ? 'Receivable - Owed to you' : 'Payable - You owe'})
-                            </option>
-                          ))}
-                        </Select>
-                      ) : (
-                        <p className="text-xs text-foreground/40 italic py-1">No debt accounts</p>
-                      )}
-                    </label>
-
-                    <label className="ui-field-label block">
-                      <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Tags (comma separated)</span>
-                      <Input 
-                        icon={Tag}
-                        placeholder="Food, Leisure..."
-                        value={st.tagsInput}
-                        onChange={e => handleUpdateSubTransaction(idx, { tagsInput: e.target.value })}
-                      />
-                    </label>
-
-                    <label className="ui-field-label block">
-                      <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 mb-1.5 block">Notes / Detail</span>
-                      <Input 
-                        icon={AlignLeft}
-                        placeholder="Sub-item notes..."
-                        value={st.description}
-                        onChange={e => handleUpdateSubTransaction(idx, { description: e.target.value })}
-                      />
-                    </label>
-                  </div>
-                ))}
-              </div>
-
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={handleAddSubTransaction}
-                className="w-full mt-3 py-3 border-dashed border-2 flex items-center justify-center gap-2"
-              >
-                <Plus size={16} /> Add Another Sub-Transaction
-              </Button>
-            </div>
-          </>
-        )}
+              {(st.forWhom || 'me') === 'me' && <>
+                <label className="ui-field-label block">Category
+                  <Select value={st.categoryId} onChange={e => handleUpdateSubTransaction(idx, { categoryId: e.target.value })} required>
+                    {availableCategories.filter(c => c.type !== 'income').map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                  </Select>
+                </label>
+                <label className="ui-field-label block">Status
+                  <Select value={st.status || 'normal'} onChange={e => handleUpdateSubTransaction(idx, { status: e.target.value as TransactionStatus })}>
+                    <option value="normal">Normal</option><option value="pending">Pending</option><option value="hidden">Hidden</option>
+                  </Select>
+                </label>
+                <label className="ui-field-label block">Tags
+                  <Input value={st.tagsInput} onChange={e => handleUpdateSubTransaction(idx, { tagsInput: e.target.value })} />
+                </label>
+              </>}
+              <label className="ui-field-label block">Notes
+                <Input value={st.description} onChange={e => handleUpdateSubTransaction(idx, { description: e.target.value })} />
+              </label>
+            </fieldset>)}
+          </div>
+          <p className="ui-meta">Total: {formatCurrency(groupTotalAmount, settings.currency)}</p>
+          <Button type="button" variant="secondary" onClick={handleAddSubTransaction}><Plus size={16} /> Add expense</Button>
+        </>)}
 
         {/* ======================= TAB 3: TRANSFER ======================= */}
         {mode === 'transfer' && (
@@ -1373,7 +1103,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                       <optgroup label="Debt Accounts">
                         {debtAccounts.map(a => (
                           <option key={a.id} value={a.id}>
-                            {a.name} ({a.debtDirection === 'receivable' ? 'Receivable' : 'Payable'})
+                            {a.name}
                           </option>
                         ))}
                       </optgroup>
@@ -1407,7 +1137,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                       <optgroup label="Debt Accounts">
                         {debtAccounts.map(a => (
                           <option key={a.id} value={a.id} disabled={a.id === formData.accountId}>
-                            {a.name} ({a.debtDirection === 'receivable' ? 'Receivable' : 'Payable'}) {a.id === formData.accountId ? '(Current Source)' : ''}
+                            {a.name} {a.id === formData.accountId ? '(Current Source)' : ''}
                           </option>
                         ))}
                       </optgroup>
@@ -1674,7 +1404,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
             {/* Shared Account Split for Subscription */}
             {isSelectedAccountShared && (
               <div className="p-4 bg-sky-500/5 border border-sky-500/15 rounded-2xl space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2 text-sky-600 dark:text-sky-400">
                     <Users size={16} />
                     <span className="text-xs font-bold uppercase tracking-wider">Shared Recurring Split</span>
@@ -1686,8 +1416,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
 
                 <div className="flex items-center gap-2">
                   {[
-                    { label: '50% (Half)', ratio: 0.5 },
-                    { label: '100% (Mine)', ratio: 1.0 },
+                    { label: '50%', ratio: 0.5 },
+                    { label: '100%', ratio: 1.0 },
                     { label: 'Custom', ratio: 'custom' }
                   ].map(opt => {
                     const isSelected = opt.ratio === 'custom'
@@ -1727,7 +1457,7 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                 <div className="grid grid-cols-2 gap-3 pt-1">
                   <div>
                     <span className="ui-section-title text-[10px] font-bold uppercase tracking-wider opacity-40 block mb-1">
-                      My Share (Monthly Expected)
+                      My share
                     </span>
                     <Input
                       placeholder="0.00"

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { 
   Account, Transaction, RecurringTransaction, Category, Tag, UserSettings, DataContextValue 
 } from '../types';
@@ -9,7 +9,7 @@ import {
   writeBatch, getDocs, runTransaction
 } from 'firebase/firestore';
 import { generateDueTransactions } from '../utils/recurring';
-import { isInitialBalanceTx } from '../utils/financial';
+import { isInitialBalanceTx, normalizeDebtAccount } from '../utils/financial';
 
 const DataContext = createContext<DataContextValue | undefined>(undefined);
 
@@ -91,7 +91,7 @@ export const dedupeAndSortCategories = (cats: Category[]): Category[] => {
 };
 
 const sortAccounts = (accs: Account[]): Account[] => {
-  return [...accs].sort((a, b) => {
+  return accs.map(normalizeDebtAccount).sort((a, b) => {
     const orderA = a.order !== undefined ? a.order : 999999;
     const orderB = b.order !== undefined ? b.order : 999999;
     if (orderA !== orderB) return orderA - orderB;
@@ -124,6 +124,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const seedDefaults = useCallback(async (uid: string) => {
     const now = Date.now();
 
+    const accounts: Account[] = [
+      { id: 'default-cash', name: 'Cash', type: 'regular', initialBalance: 0, order: 0, createdAt: now, updatedAt: now },
+      { id: 'default-debts', name: 'Dettes', type: 'debt', debtBalanceVersion: 2, initialBalance: 0, order: 1, createdAt: now, updatedAt: now },
+    ];
     const categories: Category[] = DEFAULT_CATEGORIES.map(c => ({
       ...c,
       id: crypto.randomUUID(),
@@ -141,17 +145,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const settings: UserSettings = {
       ...DEFAULT_SETTINGS,
       initialized: true,
+      defaultAccountsVersion: 1,
       updatedAt: now
     };
 
     if (firebaseReady && db) {
       const batch = writeBatch(db);
+      accounts.forEach(a => batch.set(doc(db, `users/${uid}/accounts`, a.id), a));
       categories.forEach(c => batch.set(doc(db, `users/${uid}/categories`, c.id), c));
       tags.forEach(t => batch.set(doc(db, `users/${uid}/tags`, t.id), t));
       batch.set(doc(db, `users/${uid}/settings`, 'main'), settings);
       await batch.commit();
     } else {
-      localStorage.setItem(`delta_${uid}_accounts`, JSON.stringify([]));
+      localStorage.setItem(`delta_${uid}_accounts`, JSON.stringify(accounts));
       localStorage.setItem(`delta_${uid}_categories`, JSON.stringify(categories));
       localStorage.setItem(`delta_${uid}_tags`, JSON.stringify(tags));
       localStorage.setItem(`delta_${uid}_settings`, JSON.stringify(settings));
@@ -250,9 +256,37 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, authLoading, seedDefaults]);
 
+  const defaultsInFlight = useRef(false);
+  useEffect(() => {
+    if (!user || importReadyUid !== user.uid || data.settings.defaultAccountsVersion === 1 || defaultsInFlight.current) return;
+    defaultsInFlight.current = true;
+    const uid = user.uid;
+    const seedMissingAccounts = async () => {
+      const now = Date.now();
+      const defaults: Account[] = [
+        { id: 'default-cash', name: 'Cash', type: 'regular', initialBalance: 0, order: data.accounts.length, createdAt: now, updatedAt: now },
+        { id: 'default-debts', name: 'Dettes', type: 'debt', debtBalanceVersion: 2, initialBalance: 0, order: data.accounts.length + 1, createdAt: now, updatedAt: now },
+      ];
+      const missing = defaults.filter(a => !data.accounts.some(existing => existing.id === a.id || (existing.type === a.type && existing.name.trim().toLowerCase() === a.name.toLowerCase())));
+      if (firebaseReady && db) {
+        const batch = writeBatch(db);
+        missing.forEach(a => batch.set(doc(db, `users/${uid}/accounts`, a.id), a));
+        batch.update(doc(db, `users/${uid}/settings`, 'main'), { defaultAccountsVersion: 1 });
+        await batch.commit();
+      } else {
+        const accounts = sortAccounts([...data.accounts, ...missing]);
+        const settings = { ...data.settings, defaultAccountsVersion: 1 as const };
+        localStorage.setItem(`delta_${uid}_accounts`, JSON.stringify(accounts));
+        localStorage.setItem(`delta_${uid}_settings`, JSON.stringify(settings));
+        setData(prev => ({ ...prev, accounts, settings }));
+      }
+    };
+    seedMissingAccounts().catch(() => setBankImportError('Could not create default accounts. Reload to retry.')).finally(() => { defaultsInFlight.current = false; });
+  }, [user, importReadyUid, data.settings, data.accounts]);
+
   // Migration & Auto-generate recurring transactions
   useEffect(() => {
-    if (!user || loading) return;
+    if (!user || loading || data.settings.defaultAccountsVersion !== 1) return;
 
     const uid = user.uid;
     const now = Date.now();
@@ -420,7 +454,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const modifiedAccountList = updatedAccounts.map(acc => {
           if (acc.initialBalance === undefined && accountInitialSums[acc.id] !== undefined) {
             accountsModified = true;
-            return { ...acc, initialBalance: accountInitialSums[acc.id], updatedAt: now };
+            return { ...acc, initialBalance: accountInitialSums[acc.id] * (acc.type === 'debt' && acc.debtDirection === 'payable' ? -1 : 1), updatedAt: now };
           }
           return acc;
         });
@@ -432,7 +466,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           if (accountsModified) {
             modifiedAccountList.forEach(a => {
               if (accountInitialSums[a.id] !== undefined) {
-                batch.update(doc(db, `users/${uid}/accounts`, a.id), { initialBalance: a.initialBalance || 0, updatedAt: now });
+                batch.update(doc(db, `users/${uid}/accounts`, a.id), { initialBalance: a.initialBalance || 0, ...(a.type === 'debt' ? { debtBalanceVersion: 2 } : {}), updatedAt: now });
               }
             });
           }
@@ -516,7 +550,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       };
       processRecurring();
     }
-  }, [data.transactions, data.recurringTransactions, user, loading]);
+  }, [data.transactions, data.recurringTransactions, data.settings.defaultAccountsVersion, user, loading]);
 
   const cleanData = sanitizeFirestoreData;
 
@@ -526,7 +560,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (!/^[a-f0-9]{64}$/.test(t.bankImport.key)) throw new Error('Invalid import identity.');
     const id = `bank_${t.bankImport.key}`;
     const now = Date.now();
-    const docData = cleanData({ ...t, id, createdAt: now, updatedAt: now });
+    const docData = cleanData({ ...t, ...(t.type === 'transfer' ? { debtTransferVersion: 2 } : {}), id, createdAt: now, updatedAt: now });
     if (firebaseReady && db) {
       const ref = doc(db, `users/${user.uid}/transactions`, id);
       return runTransaction(db, async transaction => {
@@ -547,7 +581,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const addTransaction = async (t: any) => {
     const id = crypto.randomUUID();
     const now = Date.now();
-    const docData = cleanData({ ...t, id, createdAt: now, updatedAt: now });
+    const docData = cleanData({ ...t, ...(t.type === 'transfer' ? { debtTransferVersion: 2 } : {}), id, createdAt: now, updatedAt: now });
     if (firebaseReady && db && user) {
       await setDoc(doc(db, `users/${user.uid}/transactions`, id), docData);
     } else if (user) {
@@ -590,6 +624,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
     const rule: RecurringTransaction = {
       ...cleanData(r),
+      ...(r.type === 'transfer' ? { debtTransferVersion: 2 as const } : {}),
       id,
       active: r.active !== undefined ? r.active : true,
       createdAt: now,
@@ -801,7 +836,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const updateAccount = async (id: string, a: any) => {
     const now = Date.now();
     const oldAccount = data.accounts.find((acc: any) => acc.id === id);
-    const docData = cleanData({ ...a, updatedAt: now });
+    const docData = cleanData({ ...(oldAccount?.type === 'debt' ? { initialBalance: oldAccount.initialBalance, debtBalanceVersion: 2 } : {}), ...a, updatedAt: now });
 
     const nameChanged = Boolean(oldAccount && a.name && oldAccount.name.trim() !== a.name.trim());
     const oldName = oldAccount?.name?.trim() || '';
@@ -846,7 +881,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       await batch.commit();
     } else if (user) {
       const existingAccounts = JSON.parse(localStorage.getItem(`delta_${user.uid}_accounts`) || '[]');
-      const updatedAccounts = sortAccounts(existingAccounts.map((item: any) => item.id === id ? { ...item, ...a, updatedAt: now } : item));
+      const updatedAccounts = sortAccounts(existingAccounts.map((item: any) => item.id === id ? { ...item, ...docData } : item));
       localStorage.setItem(`delta_${user.uid}_accounts`, JSON.stringify(updatedAccounts));
 
       let updatedTxs = data.transactions;

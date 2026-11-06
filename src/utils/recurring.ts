@@ -134,6 +134,7 @@ export function generateDueTransactions(
         createdAt: startOfDayTime,
         updatedAt: startOfDayTime
       };
+      if (rule.debtTransferVersion !== undefined) tx.debtTransferVersion = rule.debtTransferVersion;
       if (rule.transferAccountId) {
         tx.transferAccountId = rule.transferAccountId;
       }

@@ -1,10 +1,10 @@
 {
-  "version": "0.1.6",
-  "sourceHash": "525a44d3572054dd87c0c079555dfcaae46b0ae1d4c2c00024323f8ed5be2b01",
-  "fileName": "3gaspo-app-ui-0.1.6.tgz",
-  "integrity": "sha512-HvgkVoj3egVmN77TkBstRWaDprqckIGzXwiKtjYQmwvMIexoSUXfg97HXqOfCKzb1sJ6Yl0M7GOzNVeqUIcY9A==",
+  "version": "0.1.8",
+  "sourceHash": "275cf1608cb0afa949b637b0261be3217d02267538994aec0e9b2fef3cbec37e",
+  "fileName": "3gaspo-app-ui-0.1.8.tgz",
+  "integrity": "sha512-GSo9NFgegG/dohaChzmOFuGQese1oqPH4TyaZSeW4IUa6NWm1IFL/SO9TFTIjRZrkwUDitSd+OBMnqJfNrlRag==",
   "files": {
-    "src/ActionButton.tsx": "54f4cf15c71b3d51cb16bfc56dbbc71b3b294197b3e2dc2cd627de30d8917506",
+    "src/ActionButton.tsx": "81a1321f0a130396be81b91813a1a205ea1fd0b3413082a2039e899c0642e9eb",
     "src/ActionMenu.tsx": "4b3bdd5096b83181ed106a9665bad5aa26b3787b0869e816318939ded4f7a396",
     "src/AuthForm.tsx": "c7aed0f810e2999d2c69c08844ad62666f337feb72097f37c3809009575fe072",
     "src/AuthShell.tsx": "ab50c5705b64a30b8809538fbdab008e443de0f336164c09397b36a2dbcffc41",
@@ -22,8 +22,8 @@
     "src/ScreenBoundary.tsx": "6fb9b889a154baa1d0e61c661a39ff72ef3709370925e0ea7d2d6511df28ea9c",
     "src/SearchField.tsx": "2975c4dd9c065fb700f1b17b17afa9a84522dda94602b24d8d65e6f7ebca2294",
     "src/SettingsSwitch.tsx": "625d6514bae6040e735f07c8b99c1de80d6d63535bd2e00d6ca684aed825be87",
-    "src/StateFeedback.tsx": "90e3db188132867fc203d8af496ddce94a13a4949d962ef21732eb4b5f362891",
-    "src/styles/components.css": "f408793b66b0e2c390ef418fb657d8f76bea22e34f088f936deaaa8e25eb4b86",
+    "src/StateFeedback.tsx": "116b433402455e41f4a38007aa290f7dbfdfc7b04495517136a12eddede3f010",
+    "src/styles/components.css": "f450d3e1775087dde2a1025618188b6c8721e110d131692b010d6aa5752b7cf6",
     "src/styles/dialogs.css": "aedb3ad403f6c9ade7b1a2d99167e5416e6eb40e4649752c14c76d33e4581224",
     "src/styles/forms.css": "5e062316d8e65b8b9effc4425ed153e1d4b83465ca46a499f009020565b2bb8b",
     "src/styles/navigation.css": "b5645fdc06818bea4199e349f8d07ff6c6a18abfdae95ddbec5490615c1440dc",
@@ -31,7 +31,7 @@
     "src/styles/theme.css": "19cbb4efcb64a90633ebe4463f0d1eb81088d552c3a87397fa2959eff76a55f8",
     "src/styles/tools.css": "bcde49261be808e570e6f8f5be7506ea8667cbbe0f359cf540f6499db68c67bd",
     "src/ValidatedForm.tsx": "03dad64fd52aaed77ea414bab5699c3b31c692dc449620da9c216efa0ea57b2f",
-    "package.json": "eb52e8e231d54840a79fa6dc8643c4db490a43081cab3d0b5e73cf0a47602ba3",
+    "package.json": "5b3c846a8263e4010d9864173d13c73c72ff30eedb0296df704e824fb3af354d",
     "consumer-map.json": "4bc0835017d4c673ce43312868456bb6f3fa18284e0137748f876ed3dc14c4b3"
   }
 }

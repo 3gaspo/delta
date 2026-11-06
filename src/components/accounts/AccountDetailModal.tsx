@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Account, Transaction } from '../../types';
 import { useData } from '../../providers/DataProvider';
 import { formatCurrency, formatDate, cn } from '../../lib/utils';
-import { getAccountBalance, computeAccountCashflowAlert } from '../../utils/financial';
+import { getAccountBalance, computeAccountCashflowAlert, getTransactionAccountDelta } from '../../utils/financial';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Base';
 import { 
@@ -20,8 +20,8 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
   const [isEditingAccount, setIsEditingAccount] = useState(false);
 
   const isDebt = account?.type === 'debt';
-  const isReceivable = account?.debtDirection === 'receivable';
   const balance = account ? getAccountBalance(account.id, transactions, account) : 0;
+  const isReceivable = balance >= 0;
 
   const cashflowAlert = useMemo(() => {
     if (!account) return null;
@@ -29,7 +29,7 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
   }, [account, transactions, recurringTransactions]);
 
   const [activeTab, setActiveTab] = useState<'activity' | 'cashflow'>(() => {
-    return (cashflowAlert?.willGoNegative || cashflowAlert?.isNegativeNow) ? 'cashflow' : 'activity';
+    return !isDebt && (cashflowAlert?.willGoNegative || cashflowAlert?.isNegativeNow) ? 'cashflow' : 'activity';
   });
 
   // All transactions touching this account: primary, transfer, or debt link
@@ -81,7 +81,7 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
                       : "bg-ui-ink/10 text-foreground/80")
               )}>
                 {isDebt 
-                  ? (isReceivable ? 'Receivable (Owed to you)' : 'Payable (You owe)') 
+                  ? 'Debt account'
                   : (account.isShared ? `Shared Account (${Math.round((account.defaultMyShareRatio ?? 0.5) * 100)}% My Share)` : 'Regular Bank Account')}
               </span>
               <p className="text-2xl sm:text-3xl font-black tracking-tight text-foreground">
@@ -100,7 +100,7 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
           </Button>
         </div>
 
-        {cashflowAlert && (cashflowAlert.isNegativeNow || cashflowAlert.willGoNegative) && (
+        {!isDebt && cashflowAlert && (cashflowAlert.isNegativeNow || cashflowAlert.willGoNegative) && (
           <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2">
             <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400 font-bold text-xs uppercase tracking-wider">
               <AlertTriangle size={16} className="shrink-0" />
@@ -144,7 +144,7 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
           >
             <CalendarClock size={13} />
             <span>Cashflow Sequence</span>
-            {cashflowAlert && (cashflowAlert.isNegativeNow || cashflowAlert.willGoNegative) && (
+            {!isDebt && cashflowAlert && (cashflowAlert.isNegativeNow || cashflowAlert.willGoNegative) && (
               <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
             )}
           </button>
@@ -173,37 +173,12 @@ export function AccountDetailModal({ account, onClose }: AccountDetailModalProps
                 relevantTransactions.map(tx => {
                   const cat = categories.find(c => c.id === tx.categoryId);
                   const isLinkedDebt = tx.debtAccountId === account.id;
-                  const isPrimaryAccount = tx.accountId === account.id;
-                  const isTransferDest = tx.transferAccountId === account.id;
 
                   // Calculate impact on this specific account
-                  let impactDelta = 0;
                   let impactSign = '';
                   let impactColor = '';
 
-                  if (isLinkedDebt) {
-                    if (isReceivable) {
-                      impactDelta = tx.type === 'expense' ? tx.amount : -tx.amount;
-                    } else {
-                      impactDelta = tx.type === 'income' ? tx.amount : -tx.amount;
-                    }
-                  } else if (isPrimaryAccount) {
-                    if (isDebt) {
-                      if (isReceivable) {
-                        impactDelta = tx.type === 'expense' ? tx.amount : -tx.amount;
-                      } else {
-                        impactDelta = tx.type === 'income' ? tx.amount : -tx.amount;
-                      }
-                    } else {
-                      impactDelta = tx.type === 'income' ? tx.amount : -tx.amount;
-                    }
-                  } else if (isTransferDest) {
-                    if (isDebt) {
-                      impactDelta = isReceivable ? tx.amount : -tx.amount;
-                    } else {
-                      impactDelta = tx.amount;
-                    }
-                  }
+                  const impactDelta = getTransactionAccountDelta(account.id, tx, account);
 
                   if (impactDelta > 0) {
                     impactSign = '+';

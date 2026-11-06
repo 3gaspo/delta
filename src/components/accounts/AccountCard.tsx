@@ -19,10 +19,10 @@ export function AccountCard({ account, onClick, onEdit, onDelete }: AccountCardP
   const balance = getAccountBalance(account.id, transactions, account);
   
   const isDebt = account.type === 'debt';
-  const isReceivable = account.debtDirection === 'receivable';
+  const isReceivable = balance >= 0;
 
   const cashflowAlert = useMemo(() => {
-    if (account.archived) return null;
+    if (account.archived || account.type === 'debt') return null;
     return computeAccountCashflowAlert(account, transactions, recurringTransactions);
   }, [account, transactions, recurringTransactions]);
 
@@ -95,7 +95,7 @@ export function AccountCard({ account, onClick, onEdit, onDelete }: AccountCardP
           </div>
           <p className="text-[10px] font-bold uppercase tracking-wider opacity-40">
             {isDebt 
-              ? (isReceivable ? 'Receivable' : 'Payable') 
+              ? 'Debt account'
               : (account.isShared 
                   ? `${formatPercent(account.defaultMyShareRatio ?? 0.5)} My Share`
                   : 'Regular Account')}

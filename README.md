@@ -2,10 +2,14 @@
 
 Delta permet de suivre ses finances personnelles : comptes, opérations, récurrences et statistiques. L’application propose un mode local et un mode Firebase pour retrouver ses données avec un compte utilisateur.
 
+Le nom affiché dans l’application, les favoris et les métadonnées d’installation web est **Delta** ; le nom technique npm est `delta`. Le manifeste est dans `public/manifest.json`, l’icône de l’application dans `public/delta.svg` et le logo des paramètres dans `public/gaspo_logo.svg`.
+
+Les icônes utilisent un canevas de 512 × 512, un fond noir opaque et des formes gris-blanc `#D9D9D9`. Les PNG `public/delta-192.png` et `delta-512.png` sont les exports standard ; `delta-maskable-512.png` (Android) et `delta-apple-touch-icon.png` (Apple, 180 × 180) appliquent la même marge de 10 % par côté, avec un symbole à 80 % de sa taille d’origine. Ils dérivent du SVG et sont référencés par le manifeste et les métadonnées Apple. Après modification du SVG, régénérer ces exports.
+
 ## Fonctionnalités
 
-- Comptes courants et comptes de dette, soldes initiaux, archivage, ordre et partage des dépenses.
-- Dépenses, revenus, virements, opérations groupées, statuts en attente ou masqués, catégories colorées et tags.
+- Comptes courants et comptes de dette, soldes initiaux, archivage, ordre et partage des dépenses. Cash et Dettes sont créés à zéro au premier lancement ; les profils existants reçoivent ces comptes une seule fois s’ils manquent. Un solde de dette positif représente une créance, un solde négatif une somme due.
+- Dépenses, revenus, virements, opérations groupées, statuts en attente ou masqués, catégories colorées et tags. Les dépenses groupées ont un seul compte payeur, ou External, et se répartissent par montants ou ratios avec un total vérifié au centime. Chaque part est liée à un compte de dette et orientée For me / For others ; seules les parts personnelles entrent dans les statistiques. Les parts personnelles payées par External suivent le filtre des dettes.
 - Règles récurrentes, abonnements, prévisions de trésorerie et alertes ; choix de conserver ou supprimer l’historique lors de la suppression d’une règle.
 - Historique avec recherche et filtres, statistiques de soldes, flux financiers et répartition par catégorie.
 - Export CSV et choix de la devise d’affichage : EUR, USD, JPY ou GBP.
@@ -23,6 +27,14 @@ Delta permet de suivre ses finances personnelles : comptes, opérations, récurr
 | `/import` | Aperçu et validation d’un import bancaire |
 
 La racine `/` redirige vers l’accueil. La connexion s’affiche lorsqu’aucune session n’est active. Les écrans secondaires sont chargés à la demande.
+
+## Prévisions mensuelles
+
+Dans Accounts, le plan mensuel ramène les récurrences actives à un mois (avec la part personnelle des comptes partagés). Pour chaque catégorie budgétée, il retient le plus élevé du budget et des récurrences de cette catégorie ; les récurrences sans budget s’ajoutent. La différence revenus moins dépenses donne le flux mensuel prévu. Le patrimoine affiché avec « Monthly Plan » est le patrimoine actuel augmenté de ce flux.
+
+Ce calcul représente un mois type, et non le reste du mois recalculé à partir des dépenses déjà réalisées. Les alertes de trésorerie constituent un calcul distinct : elles simulent les opérations futures et les récurrences des 60 prochains jours, sans ajouter les budgets.
+
+Les anciennes dettes payable sont lues avec un solde signé ; leurs écritures historiques gardent leur valeur économique. Les heures restent masquées dans l’historique. Les saisies manuelles conservent l’heure de création sur la date locale choisie pour ordonner les opérations ; une édition conserve l’heure existante. Les récurrences sont générées à minuit local du jour prévu, y compris lors des changements d’heure.
 
 ## Stack et organisation
 
@@ -98,7 +110,7 @@ Les tests financiers se lancent avec `node --import tsx --test tests/financial.t
 
 ## Interface partagée
 
-L’application utilise `@3gaspo/app-ui`, actuellement en version 0.1.6, pour la navigation, les titres, dialogues, formulaires, commandes, retours d’état et formats visibles. L’interface utilise Inter et des thèmes clair et sombre communs. Les dates affichées utilisent `en-GB` et les heures le format 24 h ; les formats de stockage et d’export restent propres à l’application.
+L’application utilise `@3gaspo/app-ui`, actuellement en version 0.1.8, pour la navigation, les titres, dialogues, formulaires, commandes, retours d’état et formats visibles. L’interface utilise Inter et des thèmes clair et sombre communs. Les dates affichées utilisent `en-GB` et les heures le format 24 h ; les formats de stockage et d’export restent propres à l’application.
 
 L’archive est incluse dans [vendor/](vendor/) et référencée par `package.json` et `package-lock.json`. Ce dépôt est installable et déployable seul : aucun accès au dépôt source voisin `app-ui` ni à un registre privé n’est nécessaire. Relancer `npm ci` après un pull qui change les dépendances. La vérification du package partagé s’exécute automatiquement avant le build.
 
