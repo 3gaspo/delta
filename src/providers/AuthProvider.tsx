@@ -15,6 +15,7 @@ interface AuthContextValue {
   user: User | null;
   loading: boolean;
   isFirebase: boolean;
+  loadError: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -25,32 +26,38 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    if (firebaseReady && auth) {
-      return onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
-        if (firebaseUser) {
-          setUser({ uid: firebaseUser.uid, email: firebaseUser.email });
+    try {
+      if (firebaseReady && auth) {
+        return onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
+          if (firebaseUser) {
+            setUser({ uid: firebaseUser.uid, email: firebaseUser.email });
+          } else {
+            setUser(null);
+          }
+          setLoading(false);
+        }, () => { setLoadError(true); setLoading(false); });
+      } else {
+        // Local dev mode fallback
+        const localUser = localStorage.getItem('delta_local_user');
+        const wasSignedOut = localStorage.getItem('delta_local_user_signed_out') === 'true';
+        if (localUser) {
+          setUser(JSON.parse(localUser));
+        } else if (!wasSignedOut) {
+          // Auto-login in dev mode before ever signing out!
+          const newUser = { uid: 'dev-user-001', email: 'dev@delta.local' };
+          localStorage.setItem('delta_local_user', JSON.stringify(newUser));
+          setUser(newUser);
         } else {
           setUser(null);
         }
         setLoading(false);
-      });
-    } else {
-      // Local dev mode fallback
-      const localUser = localStorage.getItem('delta_local_user');
-      const wasSignedOut = localStorage.getItem('delta_local_user_signed_out') === 'true';
-      if (localUser) {
-        setUser(JSON.parse(localUser));
-      } else if (!wasSignedOut) {
-        // Auto-login in dev mode before ever signing out!
-        const newUser = { uid: 'dev-user-001', email: 'dev@delta.local' };
-        localStorage.setItem('delta_local_user', JSON.stringify(newUser));
-        setUser(newUser);
-      } else {
-        setUser(null);
       }
-      setLoading(false);
+    } catch (error) {
+      console.error("Could not load session:", error);
+      setLoadError(true); setLoading(false);
     }
   }, []);
 
@@ -102,7 +109,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider value={{ 
       user, 
       loading, 
-      isFirebase: firebaseReady, 
+      isFirebase: firebaseReady,
+      loadError,
       signIn, 
       signUp, 
       signOut: handleSignOut 

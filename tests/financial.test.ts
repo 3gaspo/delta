@@ -139,3 +139,27 @@ test('recurring days stay at local midnight across spring and autumn clock chang
     });
   }
 });
+
+test('recurrences generate all due days beyond 500, remain idempotent and refill missing days', () => {
+  const start = new Date(2024, 0, 1).getTime();
+  const cutoff = new Date(2026, 10, 15, 12).getTime();
+  const daily = rule({ startDate: start, periodicityDays: 1 });
+  const first = generateDueTransactions(daily, cutoff);
+  assert.equal(first.newTransactions.length, 1050);
+  assert.equal(first.newTransactions[0].date, start);
+  assert.equal(first.newTransactions.at(-1)?.date, new Date(2026, 10, 15).getTime());
+  assert.equal(new Set(first.newTransactions.map(t => t.id)).size, first.newTransactions.length);
+  const saved = { ...daily, lastGeneratedDate: first.updatedLastGeneratedDate };
+  assert.equal(generateDueTransactions(saved, cutoff, first.newTransactions).newTransactions.length, 0);
+  const missing = first.newTransactions[800];
+  const refill = generateDueTransactions(saved, cutoff, first.newTransactions.filter(t => t.id !== missing.id));
+  assert.deepEqual(refill.newTransactions.map(t => [t.id, t.date]), [[missing.id, missing.date]]);
+  const expanded = generateDueTransactions({ ...saved, startDate: new Date(2023, 11, 31).getTime() }, cutoff, first.newTransactions);
+  assert.equal(expanded.newTransactions.length, 1);
+  assert.equal(expanded.newTransactions[0].date, new Date(2023, 11, 31).getTime());
+});
+
+test('recurrence progress rejects invalid intervals instead of looping indefinitely', () => {
+  assert.throws(() => generateDueTransactions(rule({ periodicityDays: Infinity })), /Invalid recurrence/);
+  assert.throws(() => generateDueTransactions(rule({ periodicityDays: Number.MAX_VALUE, startDate: date(1, 1) }), date(1, 3)), /advance/);
+});

@@ -108,9 +108,17 @@ npm run test:bank-import
 
 Les tests financiers se lancent avec `node --import tsx --test tests/financial.test.ts`. Le test navigateur [tests/bank-import.browser.mjs](tests/bank-import.browser.mjs) nécessite Chrome, Playwright et Delta en mode local sur le port 3000 ; ses prérequis sont indiqués en tête du fichier.
 
+## Chargement et données initiales
+
+Un échec de lecture affiche un message bref avec la commande `Reload page`, sans présenter une fausse liste vide. Le rechargement relance la lecture des données existantes. Les échecs d'enregistrement conservent leurs messages et parcours de nouvelle tentative dans le formulaire ou l'action concernés.
+
+Les catégories et tags par défaut sont ajoutés au premier lancement du compte. Une suppression reste enregistrée en local et dans Firebase, sans réinsertion automatique à la connexion suivante. Toutes les catégories, y compris Uncategorized, sont supprimables ; les opérations et récurrences associées sont conservées, avec une autre catégorie de repli si elle existe, sinon sans catégorie. Les formulaires restent utilisables quand la liste est vide. Une réinitialisation complète explicite restaure les valeurs initiales.
+
+Les récurrences génèrent toutes les échéances dues depuis leur date initiale jusqu'à la fin du jour courant, sans plafond total de 500. Les écritures Firebase sont fractionnées en lots techniques, sans tronquer le rattrapage ; leurs identifiants stables permettent de reprendre après un échec sans doublon.
+
 ## Interface partagée
 
-L’application utilise `@3gaspo/app-ui`, actuellement en version 0.1.8, pour la navigation, les titres, dialogues, formulaires, commandes, retours d’état et formats visibles. L’interface utilise Inter et des thèmes clair et sombre communs. Les dates affichées utilisent `en-GB` et les heures le format 24 h ; les formats de stockage et d’export restent propres à l’application.
+L’application utilise `@3gaspo/app-ui`, actuellement en version 0.1.9, pour la navigation, les titres, dialogues, formulaires, commandes, retours d’état et formats visibles. L’interface utilise Inter et des thèmes clair et sombre communs. Les dates affichées utilisent `en-GB` et les heures le format 24 h ; les formats de stockage et d’export restent propres à l’application.
 
 L’archive est incluse dans [vendor/](vendor/) et référencée par `package.json` et `package-lock.json`. Ce dépôt est installable et déployable seul : aucun accès au dépôt source voisin `app-ui` ni à un registre privé n’est nécessaire. Relancer `npm ci` après un pull qui change les dépendances. La vérification du package partagé s’exécute automatiquement avant le build.
 

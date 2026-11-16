@@ -77,6 +77,9 @@ export function generateDueTransactions(
   if (rule.active === false || !rule.periodicityDays || rule.periodicityDays <= 0) {
     return { newTransactions: [], updatedLastGeneratedDate: rule.lastGeneratedDate || 0 };
   }
+  if (!Number.isFinite(rule.periodicityDays) || !Number.isFinite(rule.startDate) || !Number.isFinite(upToDate)) {
+    throw new Error('Invalid recurrence dates or interval.');
+  }
 
   const existingDates = new Set(
     existingTransactions
@@ -107,11 +110,7 @@ export function generateDueTransactions(
 
   const newTransactions: Transaction[] = [];
   let lastGenerated = rule.lastGeneratedDate || 0;
-  let iterations = 0;
-  const maxIterations = 500; // Safeguard
-
-  while (candidateDate <= cutoffTime && iterations < maxIterations) {
-    iterations++;
+  while (candidateDate <= cutoffTime) {
     const candObj = new Date(candidateDate);
     const dateKey = `${candObj.getFullYear()}-${candObj.getMonth()}-${candObj.getDate()}`;
 
@@ -120,7 +119,7 @@ export function generateDueTransactions(
       const txDateObj = new Date(candObj.getFullYear(), candObj.getMonth(), candObj.getDate(), 0, 0, 0, 0);
       const startOfDayTime = txDateObj.getTime();
       const tx: Transaction = {
-        id: crypto.randomUUID(),
+        id: `recurring-${rule.id}-${candObj.getFullYear()}-${String(candObj.getMonth() + 1).padStart(2, '0')}-${String(candObj.getDate()).padStart(2, '0')}`,
         amount: rule.amount,
         date: startOfDayTime,
         accountId: rule.accountId,
@@ -150,7 +149,11 @@ export function generateDueTransactions(
       lastGenerated = candidateDate;
     }
 
-    candidateDate = getNextPeriodDate(candidateDate, rule.periodicityDays);
+    const nextDate = getNextPeriodDate(candidateDate, rule.periodicityDays);
+    if (!Number.isFinite(nextDate) || nextDate <= candidateDate) {
+      throw new Error('Recurrence dates must advance.');
+    }
+    candidateDate = nextDate;
   }
 
   return {

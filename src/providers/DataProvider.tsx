@@ -6,12 +6,20 @@ import { useAuth } from './AuthProvider';
 import { db, firebaseReady } from '../lib/firebase';
 import { 
   collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, 
-  writeBatch, getDocs, runTransaction
+  writeBatch, getDocs, runTransaction, type WriteBatch
 } from 'firebase/firestore';
 import { generateDueTransactions } from '../utils/recurring';
 import { isInitialBalanceTx, normalizeDebtAccount } from '../utils/financial';
 
 const DataContext = createContext<DataContextValue | undefined>(undefined);
+
+async function commitWrites(writes: ((batch: WriteBatch) => void)[]) {
+  for (let offset = 0; offset < writes.length; offset += 400) {
+    const batch = writeBatch(db!);
+    writes.slice(offset, offset + 400).forEach(write => write(batch));
+    await batch.commit();
+  }
+}
 
 const DEFAULT_SETTINGS: UserSettings = {
   darkMode: false,
@@ -117,6 +125,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     settings: DEFAULT_SETTINGS
   });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const recurringInFlight = useRef(false);
   const [importReadyUid, setImportReadyUid] = useState<string | null>(null);
   const [bankImportError, setBankImportError] = useState('');
 
@@ -130,14 +140,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     ];
     const categories: Category[] = DEFAULT_CATEGORIES.map(c => ({
       ...c,
-      id: crypto.randomUUID(),
+      id: `default-category-${c.label.toLowerCase()}`,
       createdAt: now,
       updatedAt: now
     })) as Category[];
 
     const tags: Tag[] = DEFAULT_TAGS.map(t => ({
       ...t,
-      id: crypto.randomUUID(),
+      id: `default-tag-${t.label.toLowerCase()}`,
       createdAt: now,
       updatedAt: now
     })) as Tag[];
@@ -177,55 +187,77 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setLoading(true);
     setImportReadyUid(null);
     setBankImportError('');
+    setLoadError(false);
 
     if (firebaseReady && db) {
+      const initialLoaded = new Set<string>();
       const loaded = new Set<string>();
+      let active = true;
+      let seeding = false;
+      const ready = (name: string) => {
+        if (!active) return;
+        initialLoaded.add(name);
+        if (initialLoaded.size === 6) setLoading(false);
+      };
       const markLoaded = (name: string) => {
         loaded.add(name);
         if (loaded.size === 5) setImportReadyUid(uid);
       };
-      const importLoadFailed = () => setBankImportError('Could not load your existing data. Check your connection and reload before importing.');
+      const importLoadFailed = () => {
+        if (!active) return;
+        setBankImportError('Could not load your existing data.');
+        setLoadError(true);
+        setLoading(false);
+      };
       // Firebase Subscriptions
       const unsubAccounts = onSnapshot(collection(db, `users/${uid}/accounts`), { includeMetadataChanges: true }, (snap) => {
         const accounts = sortAccounts(snap.docs.map(d => d.data() as Account));
         setData(prev => ({ ...prev, accounts }));
+        ready('accounts');
         if (!snap.metadata.fromCache) markLoaded('accounts');
       }, importLoadFailed);
 
       const unsubTransactions = onSnapshot(collection(db, `users/${uid}/transactions`), { includeMetadataChanges: true }, (snap) => {
         const transactions = snap.docs.map(d => d.data() as Transaction);
         setData(prev => ({ ...prev, transactions }));
+        ready('transactions');
         if (!snap.metadata.fromCache) markLoaded('transactions');
       }, importLoadFailed);
 
       const unsubRecurring = onSnapshot(collection(db, `users/${uid}/recurring`), (snap) => {
         const recurringTransactions = snap.docs.map(d => d.data() as RecurringTransaction);
         setData(prev => ({ ...prev, recurringTransactions }));
-      });
+        ready('recurring');
+      }, importLoadFailed);
 
       const unsubCategories = onSnapshot(collection(db, `users/${uid}/categories`), { includeMetadataChanges: true }, (snap) => {
         const categories = snap.docs.map(d => d.data() as Category);
         setData(prev => ({ ...prev, categories: dedupeAndSortCategories(categories) }));
+        ready('categories');
         if (!snap.metadata.fromCache) markLoaded('categories');
       }, importLoadFailed);
 
       const unsubTags = onSnapshot(collection(db, `users/${uid}/tags`), { includeMetadataChanges: true }, (snap) => {
         const tags = snap.docs.map(d => d.data() as Tag);
         setData(prev => ({ ...prev, tags }));
+        ready('tags');
         if (!snap.metadata.fromCache) markLoaded('tags');
       }, importLoadFailed);
 
       const unsubSettings = onSnapshot(doc(db, `users/${uid}/settings`, 'main'), { includeMetadataChanges: true }, (snap) => {
+        const fromCache = snap.metadata.fromCache;
         if (snap.exists()) {
           setData(prev => ({ ...prev, settings: snap.data() as UserSettings }));
+          ready('settings');
           if (!snap.metadata.fromCache) markLoaded('settings');
-        } else {
-          seedDefaults(uid);
+        } else if (!fromCache && !seeding) {
+          seeding = true;
+          seedDefaults(uid).catch(importLoadFailed);
         }
       }, importLoadFailed);
 
-      setLoading(false);
       return () => {
+        active = false;
         unsubAccounts();
         unsubTransactions();
         unsubRecurring();
@@ -235,24 +267,31 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       };
     } else {
       // Local Storage
-      const loadLocal = () => {
-        const s = localStorage.getItem(`delta_${uid}_settings`);
-        if (!s) {
-          seedDefaults(uid).then(loadLocal);
-          return;
+      const loadLocal = async () => {
+        try {
+          const s = localStorage.getItem(`delta_${uid}_settings`);
+          if (!s) {
+            await seedDefaults(uid);
+            await loadLocal();
+            return;
+          }
+          setData({
+            accounts: sortAccounts(JSON.parse(localStorage.getItem(`delta_${uid}_accounts`) || '[]')),
+            transactions: JSON.parse(localStorage.getItem(`delta_${uid}_transactions`) || '[]'),
+            recurringTransactions: JSON.parse(localStorage.getItem(`delta_${uid}_recurring`) || '[]'),
+            categories: dedupeAndSortCategories(JSON.parse(localStorage.getItem(`delta_${uid}_categories`) || '[]')),
+            tags: JSON.parse(localStorage.getItem(`delta_${uid}_tags`) || '[]'),
+            settings: JSON.parse(s)
+          });
+          setLoading(false);
+          setImportReadyUid(uid);
+        } catch (error) {
+          console.error('Could not load Delta data:', error);
+          setLoadError(true);
+          setLoading(false);
         }
-        setData({
-          accounts: sortAccounts(JSON.parse(localStorage.getItem(`delta_${uid}_accounts`) || '[]')),
-          transactions: JSON.parse(localStorage.getItem(`delta_${uid}_transactions`) || '[]'),
-          recurringTransactions: JSON.parse(localStorage.getItem(`delta_${uid}_recurring`) || '[]'),
-          categories: dedupeAndSortCategories(JSON.parse(localStorage.getItem(`delta_${uid}_categories`) || '[]')),
-          tags: JSON.parse(localStorage.getItem(`delta_${uid}_tags`) || '[]'),
-          settings: JSON.parse(s)
-        });
-        setLoading(false);
-        setImportReadyUid(uid);
       };
-      loadLocal();
+      void loadLocal();
     }
   }, [user, authLoading, seedDefaults]);
 
@@ -286,7 +325,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   // Migration & Auto-generate recurring transactions
   useEffect(() => {
-    if (!user || loading || data.settings.defaultAccountsVersion !== 1) return;
+    if (!user || loading || loadError || importReadyUid !== user.uid || recurringInFlight.current || data.settings.defaultAccountsVersion !== 1) return;
 
     const uid = user.uid;
     const now = Date.now();
@@ -376,61 +415,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Migration: Ensure Work and Finance default categories & tags exist
-    if (data.categories.length > 0) {
-      const existingCatLabels = new Set(data.categories.map(c => (c.label || '').toLowerCase().trim()));
-      const missingCatDefaults = DEFAULT_CATEGORIES.filter(c => !existingCatLabels.has(c.label.toLowerCase().trim()));
-      const catMigrationKey = `delta_${uid}_v2_categories_seeded`;
-
-      if (missingCatDefaults.length > 0 && !localStorage.getItem(catMigrationKey)) {
-        localStorage.setItem(catMigrationKey, 'true');
-        const newCategories: Category[] = missingCatDefaults.map(c => ({
-          ...c,
-          id: crypto.randomUUID(),
-          createdAt: now,
-          updatedAt: now
-        })) as Category[];
-
-        if (firebaseReady && db && user) {
-          const batch = writeBatch(db);
-          newCategories.forEach(c => batch.set(doc(db, `users/${uid}/categories`, c.id), c));
-          batch.commit();
-        } else {
-          const existing = JSON.parse(localStorage.getItem(`delta_${uid}_categories`) || '[]');
-          const updated = dedupeAndSortCategories([...existing, ...newCategories]);
-          localStorage.setItem(`delta_${uid}_categories`, JSON.stringify(updated));
-          setData(prev => ({ ...prev, categories: updated }));
-        }
-      }
-    }
-
-    if (data.tags.length > 0) {
-      const existingTagLabels = new Set(data.tags.map(t => (t.label || '').toLowerCase().trim()));
-      const missingTagDefaults = DEFAULT_TAGS.filter(t => !existingTagLabels.has(t.label.toLowerCase().trim()));
-      const tagMigrationKey = `delta_${uid}_v2_tags_seeded`;
-
-      if (missingTagDefaults.length > 0 && !localStorage.getItem(tagMigrationKey)) {
-        localStorage.setItem(tagMigrationKey, 'true');
-        const newTags: Tag[] = missingTagDefaults.map(t => ({
-          ...t,
-          id: crypto.randomUUID(),
-          createdAt: now,
-          updatedAt: now
-        })) as Tag[];
-
-        if (firebaseReady && db && user) {
-          const batch = writeBatch(db);
-          newTags.forEach(t => batch.set(doc(db, `users/${uid}/tags`, t.id), t));
-          batch.commit();
-        } else {
-          const existing = JSON.parse(localStorage.getItem(`delta_${uid}_tags`) || '[]');
-          const updated = [...existing, ...newTags];
-          localStorage.setItem(`delta_${uid}_tags`, JSON.stringify(updated));
-          setData(prev => ({ ...prev, tags: updated }));
-        }
-      }
-    }
-
     // Migration: Migrate legacy initial balance transactions to account.initialBalance property
     const legacyInitialBalanceTxs = data.transactions.filter(t => isInitialBalanceTx(t));
     if (legacyInitialBalanceTxs.length > 0) {
@@ -497,38 +481,38 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const newTransactionsToCreate: Transaction[] = [];
     const recurringUpdates: { id: string; lastGeneratedDate: number }[] = [];
 
-    for (const rule of data.recurringTransactions) {
-      if (rule.active === false) continue;
+    try {
+      for (const rule of data.recurringTransactions) {
+        if (rule.active === false) continue;
 
-      const { newTransactions, updatedLastGeneratedDate } = generateDueTransactions(
-        rule,
-        now,
-        data.transactions
-      );
+        const { newTransactions, updatedLastGeneratedDate } = generateDueTransactions(
+          rule,
+          now,
+          data.transactions
+        );
 
-      if (newTransactions.length > 0) {
-        newTransactionsToCreate.push(...newTransactions);
-        recurringUpdates.push({
-          id: rule.id,
-          lastGeneratedDate: updatedLastGeneratedDate
-        });
+        if (newTransactions.length > 0) {
+          newTransactionsToCreate.push(...newTransactions);
+          recurringUpdates.push({
+            id: rule.id,
+            lastGeneratedDate: updatedLastGeneratedDate
+          });
+        }
       }
+
+    } catch (error) {
+      console.error('Could not load recurring transactions:', error);
+      setLoadError(true);
+      return;
     }
 
     if (newTransactionsToCreate.length > 0) {
       const processRecurring = async () => {
         if (firebaseReady && db && user) {
-          const batch = writeBatch(db);
-          newTransactionsToCreate.forEach(nt => {
-            batch.set(doc(db, `users/${uid}/transactions`, nt.id), cleanData(nt));
-          });
-          recurringUpdates.forEach(ru => {
-            batch.update(doc(db, `users/${uid}/recurring`, ru.id), cleanData({ 
-              lastGeneratedDate: ru.lastGeneratedDate, 
-              updatedAt: Date.now() 
-            }));
-          });
-          await batch.commit();
+          await commitWrites([
+            ...newTransactionsToCreate.map(nt => (batch: WriteBatch) => batch.set(doc(db!, `users/${uid}/transactions`, nt.id), cleanData(nt))),
+            ...recurringUpdates.map(ru => (batch: WriteBatch) => batch.update(doc(db!, `users/${uid}/recurring`, ru.id), { lastGeneratedDate: ru.lastGeneratedDate, updatedAt: Date.now() })),
+          ]);
         } else {
           const existingTx = JSON.parse(localStorage.getItem(`delta_${uid}_transactions`) || '[]');
           const updatedTx = [...existingTx, ...newTransactionsToCreate];
@@ -548,9 +532,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           }));
         }
       };
-      processRecurring();
+      recurringInFlight.current = true;
+      processRecurring().catch(error => {
+        console.error('Could not load recurring transactions:', error);
+        setLoadError(true);
+      }).finally(() => { recurringInFlight.current = false; });
     }
-  }, [data.transactions, data.recurringTransactions, data.settings.defaultAccountsVersion, user, loading]);
+  }, [data.transactions, data.recurringTransactions, data.settings.defaultAccountsVersion, user, loading, loadError, importReadyUid]);
 
   const cleanData = sanitizeFirestoreData;
 
@@ -649,12 +637,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (firebaseReady && db) {
-      const batch = writeBatch(db);
-      batch.set(doc(db, `users/${user.uid}/recurring`, id), cleanData(rule));
-      newTransactions.forEach(nt => {
-        batch.set(doc(db, `users/${user.uid}/transactions`, nt.id), cleanData(nt));
-      });
-      await batch.commit();
+      await commitWrites([
+        ...newTransactions.map(nt => (batch: WriteBatch) => batch.set(doc(db!, `users/${user.uid}/transactions`, nt.id), cleanData(nt))),
+        (batch: WriteBatch) => batch.set(doc(db!, `users/${user.uid}/recurring`, id), cleanData(rule)),
+      ]);
     } else {
       const existingRec = JSON.parse(localStorage.getItem(`delta_${user.uid}_recurring`) || '[]');
       const updatedRec = [...existingRec, rule];
@@ -700,12 +686,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (firebaseReady && db) {
-      const batch = writeBatch(db);
-      batch.set(doc(db, `users/${user.uid}/recurring`, id), cleanData(updatedRule));
-      newTransactions.forEach(nt => {
-        batch.set(doc(db, `users/${user.uid}/transactions`, nt.id), cleanData(nt));
-      });
-      await batch.commit();
+      await commitWrites([
+        ...newTransactions.map(nt => (batch: WriteBatch) => batch.set(doc(db!, `users/${user.uid}/transactions`, nt.id), cleanData(nt))),
+        (batch: WriteBatch) => batch.set(doc(db!, `users/${user.uid}/recurring`, id), cleanData(updatedRule)),
+      ]);
     } else {
       const existingRec = JSON.parse(localStorage.getItem(`delta_${user.uid}_recurring`) || '[]');
       const updatedRec = existingRec.map((item: any) => item.id === id ? updatedRule : item);
@@ -1021,27 +1005,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteCategory = async (id: string) => {
-    const targetCat = data.categories.find(c => c.id === id);
-    if (targetCat && isUncategorizedCategory(targetCat.label)) {
-      return; // Do not delete the fallback Uncategorized category
-    }
-
     // Reassign transactions to Uncategorized
-    const defaultCat = data.categories.find(c => isUncategorizedCategory(c.label));
-    const uncategorizedId = defaultCat?.id || crypto.randomUUID();
+    const defaultCat = data.categories.find(c => c.id !== id && isUncategorizedCategory(c.label));
+    const uncategorizedId = defaultCat?.id || '';
     
     if (firebaseReady && db && user) {
-      const batch = writeBatch(db);
       const affected = data.transactions.filter(t => t.categoryId === id);
-      affected.forEach(t => {
-        batch.update(doc(db, `users/${user.uid}/transactions`, t.id), { categoryId: uncategorizedId });
-      });
       const affectedRecurring = data.recurringTransactions.filter(r => r.categoryId === id);
-      affectedRecurring.forEach(r => {
-        batch.update(doc(db, `users/${user.uid}/recurring`, r.id), { categoryId: uncategorizedId });
-      });
-      batch.delete(doc(db, `users/${user.uid}/categories`, id));
-      await batch.commit();
+      await commitWrites([
+        ...affected.map(t => (batch: WriteBatch) => batch.update(doc(db!, `users/${user.uid}/transactions`, t.id), { categoryId: uncategorizedId })),
+        ...affectedRecurring.map(r => (batch: WriteBatch) => batch.update(doc(db!, `users/${user.uid}/recurring`, r.id), { categoryId: uncategorizedId })),
+        (batch: WriteBatch) => batch.delete(doc(db!, `users/${user.uid}/categories`, id)),
+      ]);
     } else if (user) {
       const transactions = JSON.parse(localStorage.getItem(`delta_${user.uid}_transactions`) || '[]');
       const updatedTransactions = transactions.map((t: any) => t.categoryId === id ? { ...t, categoryId: uncategorizedId } : t);
@@ -1170,6 +1145,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       bankImportReady: Boolean(user && importReadyUid === user.uid && !bankImportError),
       bankImportError,
       loading,
+      loadError,
       addTransaction, importBankTransaction, updateTransaction, deleteTransaction, saveGroupTransaction, deleteGroupTransaction,
       addRecurringTransaction, updateRecurringTransaction, deleteRecurringTransaction,
       addAccount, updateAccount, deleteAccount, reorderAccounts,

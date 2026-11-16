@@ -108,6 +108,7 @@ export interface User {
 }
 
 export interface DataContextValue {
+  loadError: boolean;
   bankImportReady: boolean;
   bankImportError: string;
   accounts: Account[];

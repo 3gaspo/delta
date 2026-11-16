@@ -842,8 +842,9 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                   icon={Layers}
                   value={formData.categoryId}
                   onChange={e => setFormData({ ...formData, categoryId: e.target.value })}
-                  required
+                  required={availableCategories.some(c => !c.type || c.type === 'both' || c.type === formData.type)}
                 >
+                  {!availableCategories.some(c => !c.type || c.type === 'both' || c.type === formData.type) && <option value="">No category</option>}
                   {availableCategories
                     .filter(c => (!c.type || c.type === 'both' || c.type === formData.type))
                     .map(c => (
@@ -1032,7 +1033,8 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
               </label>
               {(st.forWhom || 'me') === 'me' && <>
                 <label className="ui-field-label block">Category
-                  <Select value={st.categoryId} onChange={e => handleUpdateSubTransaction(idx, { categoryId: e.target.value })} required>
+                  <Select value={st.categoryId} onChange={e => handleUpdateSubTransaction(idx, { categoryId: e.target.value })} required={availableCategories.some(c => c.type !== 'income')}>
+                    {!availableCategories.some(c => c.type !== 'income') && <option value="">No category</option>}
                     {availableCategories.filter(c => c.type !== 'income').map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                   </Select>
                 </label>
@@ -1390,8 +1392,9 @@ export function TransactionForm({ onClose, initialData, initialRecurringData, de
                   icon={Layers}
                   value={formData.categoryId}
                   onChange={e => setFormData({ ...formData, categoryId: e.target.value })}
-                  required
+                  required={availableCategories.some(c => !c.type || c.type === 'both' || c.type === subscriptionType)}
                 >
+                  {!availableCategories.some(c => !c.type || c.type === 'both' || c.type === subscriptionType) && <option value="">No category</option>}
                   {availableCategories
                     .filter(c => (!c.type || c.type === 'both' || c.type === subscriptionType))
                     .map(c => (

@@ -119,15 +119,14 @@ export default function Settings() {
                     />
                     {c.label}
                   </span>
-                  {c.label.trim().toLowerCase() !== 'uncategorized' && (
-                    <button 
+                  <ActionButton scope="delta-categories"
                       onClick={() => deleteCategory(c.id)}
                       className="ui-icon-button p-1 hover:text-red-500 transition-colors opacity-30 hover:opacity-100"
+                      aria-label={`Delete ${c.label}`}
                       title={`Delete ${c.label}`}
                     >
                       <Trash2 size={14} />
-                    </button>
-                  )}
+                    </ActionButton>
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="relative flex-1 min-w-0">
