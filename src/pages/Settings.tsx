@@ -1,4 +1,6 @@
 import { ActionButton } from '@3gaspo/app-ui/ActionButton';
+import { HelpSection } from '@3gaspo/app-ui/Tutorial';
+import { featureGuide } from '../featureGuide';
 import { ValidatedForm } from '../components/ValidatedForm';
 import { SettingsSwitch } from '../components/SettingsSwitch';
 import { DialogActions } from '../components/Dialog';
@@ -292,6 +294,8 @@ export default function Settings() {
           </ValidatedForm>
         )}
       </Card>
+
+      <HelpSection appName="Delta" sections={featureGuide} className="mt-8" />
 
       {/* Actions */}
       <div className="space-y-2 mt-8">

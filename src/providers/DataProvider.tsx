@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import { DEFAULT_DARK_MODE } from '@3gaspo/app-ui/themePreference';
 import { 
   Account, Transaction, RecurringTransaction, Category, Tag, UserSettings, DataContextValue 
 } from '../types';
@@ -22,7 +23,7 @@ async function commitWrites(writes: ((batch: WriteBatch) => void)[]) {
 }
 
 const DEFAULT_SETTINGS: UserSettings = {
-  darkMode: false,
+  darkMode: DEFAULT_DARK_MODE,
   currency: 'EUR',
   initialized: false,
   createdAt: Date.now(),

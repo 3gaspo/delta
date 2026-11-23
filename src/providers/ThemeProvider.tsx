@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { DEFAULT_DARK_MODE } from '@3gaspo/app-ui/themePreference';
 import { useData } from './DataProvider';
 
 interface ThemeContextValue {
@@ -11,20 +12,21 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { settings, updateSettings } = useData();
-  const [isDark, setIsDark] = useState(settings.darkMode);
+  const preferredDarkMode = settings.darkMode ?? DEFAULT_DARK_MODE;
+  const [isDark, setIsDark] = useState(preferredDarkMode);
   const [error, setError] = useState<string | null>(null);
-  const currentTheme = useRef(settings.darkMode);
-  const savedTheme = useRef(settings.darkMode);
+  const currentTheme = useRef(preferredDarkMode);
+  const savedTheme = useRef(preferredDarkMode);
   const pendingVersion = useRef(0);
   const version = useRef(0);
   const writes = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     if (pendingVersion.current) return;
-    currentTheme.current = settings.darkMode;
-    savedTheme.current = settings.darkMode;
-    setIsDark(settings.darkMode);
-  }, [settings.darkMode]);
+    currentTheme.current = preferredDarkMode;
+    savedTheme.current = preferredDarkMode;
+    setIsDark(preferredDarkMode);
+  }, [preferredDarkMode]);
 
   useEffect(() => { document.documentElement.classList.toggle('dark', isDark); }, [isDark]);
 

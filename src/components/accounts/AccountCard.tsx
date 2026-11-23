@@ -42,7 +42,7 @@ export function AccountCard({ account, onClick, onEdit, onDelete }: AccountCardP
     <div
       onClick={onClick || onEdit}
       className={cn(
-        "account-row w-full transition-all hover:bg-black/[0.02] dark:hover:bg-white/[0.02] cursor-pointer group",
+        "account-row w-full rounded-xl ui-interactive-surface hover:bg-black/[0.02] dark:hover:bg-white/[0.02] cursor-pointer group",
         account.archived && "opacity-40",
         account.hidden && "opacity-60 bg-black/[0.02] dark:bg-white/[0.02]"
       )}
