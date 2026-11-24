@@ -1,8 +1,8 @@
 {
-  "version": "0.1.18",
-  "sourceHash": "8030765aa50227c352b2cb5f71f6f6e45972e827a05104b0a5e5b2cea6f901d5",
-  "fileName": "3gaspo-app-ui-0.1.18.tgz",
-  "integrity": "sha512-4AFS7AMZwDbmMGSFmSopJE1PoPaHCynVk5V8ddn+RNNIGfB4W6GDWmZtslmF3Hjg9tT5zzqiJOXm3KVyW6xyRw==",
+  "version": "0.1.20",
+  "sourceHash": "8309d33dd9c83bb4c86c83fa23ed58771de787f7d9c8554063ffcd2f4ccbafef",
+  "fileName": "3gaspo-app-ui-0.1.20.tgz",
+  "integrity": "sha512-dRjZafOV3BPhCy3WJyW0kepYyeZmmnp8fykuGrM1VenQBeHqYAePlBUNwdN8ChwbQSSM2ZOYdZKjeaTJwwblpQ==",
   "files": {
     "src/ActionButton.tsx": "81a1321f0a130396be81b91813a1a205ea1fd0b3413082a2039e899c0642e9eb",
     "src/ActionMenu.tsx": "4b3bdd5096b83181ed106a9665bad5aa26b3787b0869e816318939ded4f7a396",
@@ -25,7 +25,7 @@
     "src/SettingsSwitch.tsx": "625d6514bae6040e735f07c8b99c1de80d6d63535bd2e00d6ca684aed825be87",
     "src/StateFeedback.tsx": "ae0084de4e6080b26defc09c79373fa200b6ac6ef714c908045549bbc4c00d4c",
     "src/styles/components.css": "110bb58d04354a2beee5b15c547af46a4f754af5cc3ea49f4f54ad0d9b2106f2",
-    "src/styles/dialogs.css": "17eb71acd9a725d77164192781091afaae00fb8e29ad7d1ebf43b82b3838ecc3",
+    "src/styles/dialogs.css": "1f6d61f5fa2cbc06af07ab59e338277ceafbec56b0ccc1d96958c83d3fa7eb3b",
     "src/styles/fonts/inter-latin-ext.woff2": "34b9c504cab7a73e37b746343a449132e56cf7b5481af2cb81dc74dcff25c956",
     "src/styles/fonts/inter-latin.woff2": "3100e775e8616cd2611beecfa23a4263d7037586789b43f035236a2e6fbd4c62",
     "src/styles/fonts/OFL-Inter.txt": "5b9321a4298cfeb6b34354164a1c3afc3db114569984c502b9b35d988fd58c57",
@@ -38,10 +38,10 @@
     "src/styles/theme.css": "f181d873e3120b552156507133c610bc5ccf7449833b3e9edab626ac30f6f3e8",
     "src/styles/tools.css": "bcde49261be808e570e6f8f5be7506ea8667cbbe0f359cf540f6499db68c67bd",
     "src/themePreference.ts": "e77642ff0dfee7ce845bdbec4a90f8c8cda457808f5752022ad22bfdc6afe050",
-    "src/Tutorial.tsx": "847ba103a42ac43656586a1515b455dd28657e82f27225f6c3ea9ecb8fdf27cf",
+    "src/Tutorial.tsx": "cf9bdb41f7352ed0231fa2079fc828c46fc5e8d27b09f2ea8ecbe06df412900a",
     "src/useLocalDay.tsx": "c869e1d82b00f8f7734a44d757b1120d769e975a4a66f8551beac4c7dec08a9e",
     "src/ValidatedForm.tsx": "03dad64fd52aaed77ea414bab5699c3b31c692dc449620da9c216efa0ea57b2f",
-    "package.json": "a4d4056b0cfbef7f7f6f650bbbcb9c676515cf5b2e8a63488ef3a2fe5608888f",
+    "package.json": "af4642394c95e7c7fc7798d83b7ef8ab8578a302bd2b85009a7b5e26009d636e",
     "consumer-map.json": "4bc0835017d4c673ce43312868456bb6f3fa18284e0137748f876ed3dc14c4b3"
   }
 }
