@@ -1,4 +1,5 @@
 import { ActionButton } from '@3gaspo/app-ui/ActionButton';
+import { SettingsDisclosure } from '@3gaspo/app-ui/SettingsDisclosure';
 import { HelpSection } from '@3gaspo/app-ui/Tutorial';
 import { featureGuide } from '../featureGuide';
 import { ValidatedForm } from '../components/ValidatedForm';
@@ -83,8 +84,8 @@ export default function Settings() {
     <PageContainer title="Settings" devMode={!isFirebase}>
       {themeError && <p role="alert" className="ui-error text-red-600 text-sm mb-4">{themeError}</p>}
       {/* App Specific Settings */}
-      <Card label="Categories">
-        <div className="p-4 space-y-6">
+      <SettingsDisclosure label="Categories" className="mb-6">
+        <div className="bg-ui-surface rounded-2xl shadow-sm p-4 space-y-6">
           <div className="flex items-center gap-2">
             <CategoryColorPicker 
               color={newCatColor} 
@@ -151,17 +152,17 @@ export default function Settings() {
             ))}
           </div>
         </div>
-      </Card>
+      </SettingsDisclosure>
 
-      <Card label="Tags">
-        <div className="p-4 space-y-4">
+      <SettingsDisclosure label="Tags" className="mb-6">
+        <div className="bg-ui-surface rounded-2xl shadow-sm p-4 space-y-4">
           <div className="flex gap-2">
             <Input 
               placeholder="New tag..." 
               value={newTag} 
               onChange={e => setNewTag(e.target.value)} 
             />
-            <Button size="icon" onClick={() => { if(newTag) { addTag({ label: newTag }); setNewTag(''); } }}>
+            <Button size="icon" aria-label="Add tag" onClick={() => { if(newTag) { addTag({ label: newTag }); setNewTag(''); } }}>
               <Plus size={18} />
             </Button>
           </div>
@@ -179,7 +180,7 @@ export default function Settings() {
             ))}
           </div>
         </div>
-      </Card>
+      </SettingsDisclosure>
 
       <Card label="Currency">
         <div className="p-4 space-y-3">
