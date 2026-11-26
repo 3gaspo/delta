@@ -1,6 +1,7 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { isGuestSession } from '@3gaspo/app-ui/guestSession';
 
 export const firebaseConfig = {
   // @ts-ignore
@@ -18,6 +19,7 @@ export const firebaseConfig = {
 };
 
 export const firebaseReady =
+  !isGuestSession &&
   // @ts-ignore
   !!import.meta.env.VITE_FIREBASE_API_KEY &&
   // @ts-ignore

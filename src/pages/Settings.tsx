@@ -1,3 +1,5 @@
+import { GuestAccount } from '@3gaspo/app-ui/GuestAccount';
+import { isGuestSession } from '@3gaspo/app-ui/guestSession';
 import { ActionButton } from '@3gaspo/app-ui/ActionButton';
 import { SettingsDisclosure } from '@3gaspo/app-ui/SettingsDisclosure';
 import { HelpSection } from '@3gaspo/app-ui/Tutorial';
@@ -81,7 +83,7 @@ export default function Settings() {
   };
 
   return (
-    <PageContainer title="Settings" devMode={!isFirebase}>
+    <PageContainer title="Settings" devMode={!isFirebase && !isGuestSession}>
       {themeError && <p role="alert" className="ui-error text-red-600 text-sm mb-4">{themeError}</p>}
       {/* App Specific Settings */}
       <SettingsDisclosure label="Categories" className="mb-6">
@@ -233,7 +235,7 @@ export default function Settings() {
       </Card>
 
       {/* Account */}
-      <Card label="Account">
+      {isGuestSession ? <GuestAccount /> : <Card label="Account">
         {user ? (
           <div className="p-6 flex items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-ui-primary flex items-center justify-center text-ui-primary-text shrink-0">
@@ -294,13 +296,13 @@ export default function Settings() {
             </button>
           </ValidatedForm>
         )}
-      </Card>
+      </Card>}
 
       <HelpSection appName="Delta" sections={featureGuide} className="mt-8" />
 
       {/* Actions */}
       <div className="space-y-2 mt-8">
-        {user && (
+        {user && !isGuestSession && (
           <button onClick={signOut} className="ui-setting-action w-full p-6 bg-ui-section rounded-[24px] flex items-center justify-between hover:bg-black/10 transition-colors text-left group">
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 rounded-xl bg-ui-surface flex items-center justify-center">

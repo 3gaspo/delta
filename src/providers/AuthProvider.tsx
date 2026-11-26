@@ -1,3 +1,4 @@
+import { appStorage, guestUser, isGuestSession } from '@3gaspo/app-ui/guestSession';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, firebaseReady } from '../lib/firebase';
 import { 
@@ -6,8 +7,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut as firebaseSignOut,
-  GoogleAuthProvider,
-  signInWithPopup
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { User } from '../types';
 
@@ -18,6 +18,7 @@ interface AuthContextValue {
   loadError: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
+  resetPassword?: (email: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -30,6 +31,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     try {
+      if (isGuestSession) {
+        setUser(guestUser);
+        setLoading(false);
+        return;
+      }
       if (firebaseReady && auth) {
         return onAuthStateChanged(auth, (firebaseUser: FirebaseUser | null) => {
           if (firebaseUser) {
@@ -41,14 +47,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }, () => { setLoadError(true); setLoading(false); });
       } else {
         // Local dev mode fallback
-        const localUser = localStorage.getItem('delta_local_user');
-        const wasSignedOut = localStorage.getItem('delta_local_user_signed_out') === 'true';
+        const localUser = appStorage.getItem('delta_local_user');
+        const wasSignedOut = appStorage.getItem('delta_local_user_signed_out') === 'true';
         if (localUser) {
           setUser(JSON.parse(localUser));
         } else if (!wasSignedOut) {
           // Auto-login in dev mode before ever signing out!
           const newUser = { uid: 'dev-user-001', email: 'dev@delta.local' };
-          localStorage.setItem('delta_local_user', JSON.stringify(newUser));
+          appStorage.setItem('delta_local_user', JSON.stringify(newUser));
           setUser(newUser);
         } else {
           setUser(null);
@@ -66,8 +72,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await signInWithEmailAndPassword(auth, email, password);
     } else {
       const mockUser = { uid: 'mock-user-' + Date.now(), email };
-      localStorage.removeItem('delta_local_user_signed_out');
-      localStorage.setItem('delta_local_user', JSON.stringify(mockUser));
+      appStorage.removeItem('delta_local_user_signed_out');
+      appStorage.setItem('delta_local_user', JSON.stringify(mockUser));
       setUser(mockUser);
     }
   };
@@ -77,20 +83,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await createUserWithEmailAndPassword(auth, email, password);
     } else {
       const mockUser = { uid: 'mock-user-' + Date.now(), email };
-      localStorage.removeItem('delta_local_user_signed_out');
-      localStorage.setItem('delta_local_user', JSON.stringify(mockUser));
-      setUser(mockUser);
-    }
-  };
-
-  const signInWithGoogle = async () => {
-    if (firebaseReady && auth) {
-      const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-    } else {
-      const mockUser = { uid: 'google-mock-' + Date.now(), email: 'google-user@dev.local' };
-      localStorage.removeItem('delta_local_user_signed_out');
-      localStorage.setItem('delta_local_user', JSON.stringify(mockUser));
+      appStorage.removeItem('delta_local_user_signed_out');
+      appStorage.setItem('delta_local_user', JSON.stringify(mockUser));
       setUser(mockUser);
     }
   };
@@ -99,8 +93,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (firebaseReady && auth) {
       await firebaseSignOut(auth);
     } else {
-      localStorage.removeItem('delta_local_user');
-      localStorage.setItem('delta_local_user_signed_out', 'true');
+      appStorage.removeItem('delta_local_user');
+      appStorage.setItem('delta_local_user_signed_out', 'true');
       setUser(null);
     }
   };
@@ -113,6 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loadError,
       signIn, 
       signUp, 
+      resetPassword: auth ? email => sendPasswordResetEmail(auth, email) : undefined,
       signOut: handleSignOut 
     }}>
       {children}
