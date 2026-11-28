@@ -26,6 +26,8 @@ Les icônes utilisent un canevas de 512 × 512, un fond noir opaque et des forme
 | `/settings` | Settings : catégories, tags, devise, thème, compte et export |
 | `/import` | Aperçu et validation d’un import bancaire |
 
+Dans Settings, les volets `Categories` et `Tags` sont fermés par défaut. Ouvrez le volet voulu pour afficher la liste complète et ses commandes de gestion.
+
 La racine `/` redirige vers l’accueil. La connexion s’affiche lorsqu’aucune session n’est active. Les écrans secondaires sont chargés à la demande.
 
 Un tutoriel présente le but de l’app, puis les fonctions principales de ses quatre onglets avec leurs icônes. Il s’ouvre à la première visite de l’accueil après connexion et sa fermeture est mémorisée pour ce compte dans le navigateur. La section Help de Settings regroupe `View tutorial` et `Detailed functionalities`, qui ouvre un guide des parcours et des calculs de l’app.
@@ -67,6 +69,10 @@ Sans configuration Firebase complète, Delta utilise le stockage local du naviga
 
 Le mode local conserve ses données dans le `localStorage` du navigateur, sans synchronisation entre appareils. Sa session de développement n’est pas une authentification distante. Changer de mode de stockage ne transfère pas automatiquement ces données.
 
+Avec Firebase, `Forgot password?` envoie un lien de réinitialisation à l’adresse saisie. Le formulaire indique qu’une adresse est inconnue si Firebase le signale. Lorsque Firebase protège l’existence des comptes, l’accusé de réception reste générique.
+
+`Continue as guest` ouvre une session de test sans compte. Les données et réglages invités restent dans le `sessionStorage` de l’onglet, sans écriture dans Firestore. Ils sont conservés au rechargement et effacés à la fermeture de l’onglet ou après confirmation avec `End guest session` dans Settings.
+
 Pour utiliser Firebase, copier [.env.example](.env.example) vers `.env.local` et renseigner la configuration de l’application web :
 
 ```dotenv
@@ -79,6 +85,8 @@ VITE_FIREBASE_APP_ID=
 ```
 
 Activer l’authentification email/mot de passe et Firestore dans le projet Firebase concerné. Ces variables sont lues par Vite au démarrage et lors du build : redémarrer le serveur ou reconstruire après une modification. Conserver les fichiers d’environnement locaux hors Git.
+
+Dans Firebase Console → Authentication → Templates → Password reset, renseigner `Delta` dans le champ `Sender name`. [Paramètres du modèle Firebase](https://docs.cloud.google.com/identity-platform/docs/reference/rest/v2/Config#EmailTemplate)
 
 ## Commandes et validation
 
@@ -114,13 +122,13 @@ Les tests financiers se lancent avec `node --import tsx --test tests/financial.t
 
 Un échec de lecture affiche un message bref avec la commande `Reload page`, sans présenter une fausse liste vide. Le rechargement relance la lecture des données existantes. Les échecs d'enregistrement conservent leurs messages et parcours de nouvelle tentative dans le formulaire ou l'action concernés.
 
-Les catégories et tags par défaut sont ajoutés au premier lancement du compte. Une suppression reste enregistrée en local et dans Firebase, sans réinsertion automatique à la connexion suivante. Toutes les catégories, y compris Uncategorized, sont supprimables ; les opérations et récurrences associées sont conservées, avec une autre catégorie de repli si elle existe, sinon sans catégorie. Les formulaires restent utilisables quand la liste est vide. Une réinitialisation complète explicite restaure les valeurs initiales.
+Les catégories et tags par défaut sont ajoutés au premier lancement du compte. Une suppression reste enregistrée en local et dans Firebase, sans réinsertion automatique à la connexion suivante. Les catégories réelles sont supprimables ; leurs opérations et récurrences restent conservées sans catégorie. Uncategorized est un regroupement virtuel, affiché seulement si des entrées y sont rattachées, sans commande de gestion. Les anciennes références sont conservées en stockage et interprétées comme sans catégorie dans les vues. Les formulaires restent utilisables quand la liste est vide. Une réinitialisation complète explicite restaure les valeurs initiales.
 
 Les récurrences génèrent toutes les échéances dues depuis leur date initiale jusqu'à la fin du jour courant, sans plafond total de 500. Les écritures Firebase sont fractionnées en lots techniques, sans tronquer le rattrapage ; leurs identifiants stables permettent de reprendre après un échec sans doublon.
 
 ## Interface partagée
 
-L’application utilise `@3gaspo/app-ui`, actuellement en version 0.1.12, pour la navigation, les titres, dialogues, formulaires, commandes, retours d’état et formats visibles. Inter et Source Sans 3 sont hébergées avec l’application. Source Sans 3 sert au titre portant le nom de l’app, et Inter au reste de l’interface. Les dates affichées utilisent `en-GB` et les heures le format 24 h ; les formats de stockage et d’export restent propres à l’application.
+L’application utilise `@3gaspo/app-ui`, actuellement en version 0.1.23, pour la navigation, les titres, dialogues, formulaires, commandes, retours d’état et formats visibles. Inter et Source Sans 3 sont hébergées avec l’application. Source Sans 3 sert au titre portant le nom de l’app, et Inter au reste de l’interface. Les dates affichées utilisent `en-GB` et les heures le format 24 h ; les formats de stockage et d’export restent propres à l’application.
 
 L’archive est incluse dans [vendor/](vendor/) et référencée par `package.json` et `package-lock.json`. Ce dépôt est installable et déployable seul : aucun accès au dépôt source voisin `app-ui` ni à un registre privé n’est nécessaire. Relancer `npm ci` après un pull qui change les dépendances. La vérification du package partagé s’exécute automatiquement avant le build.
 

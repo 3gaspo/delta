@@ -69,6 +69,7 @@ export default function Settings() {
 
   // Simple category/tag management
   const [newCat, setNewCat] = useState('');
+  const [categoryError, setCategoryError] = useState<string | null>(null);
   const [newCatColor, setNewCatColor] = useState('#3b82f6');
   const [newTag, setNewTag] = useState('');
 
@@ -100,21 +101,26 @@ export default function Settings() {
               onChange={e => setNewCat(e.target.value)} 
               className="flex-1"
             />
-            <Button 
-              size="icon" 
-              onClick={() => { 
-                if (newCat.trim()) { 
-                  addCategory({ label: newCat.trim(), color: newCatColor, type: 'both' }); 
-                  setNewCat(''); 
-                } 
+            <ActionButton
+              className="ui-button ui-button-primary ui-icon-button"
+              onClick={async () => {
+                setCategoryError(null);
+                if (!newCat.trim()) return;
+                try {
+                  await addCategory({ label: newCat.trim(), color: newCatColor, type: 'both' });
+                  setNewCat('');
+                } catch (error) {
+                  setCategoryError(error instanceof Error ? error.message : 'Could not save category.');
+                }
               }}
               title="Add category"
             >
               <Plus size={18} />
-            </Button>
+            </ActionButton>
           </div>
+          {categoryError && <p role="alert" className="ui-error">{categoryError}</p>}
           <div className="space-y-3">
-            {categories.map(c => (
+            {categories.filter(c => c.id).map(c => (
               <div key={c.id} className="flex flex-col gap-2 p-4 bg-ui-section rounded-2xl">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold uppercase tracking-wider flex items-center gap-2">

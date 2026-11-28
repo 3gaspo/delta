@@ -10,6 +10,7 @@ import {
   collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, 
   writeBatch, getDocs, runTransaction, type WriteBatch
 } from 'firebase/firestore';
+import { projectUncategorized } from '../utils/uncategorized';
 import { generateDueTransactions } from '../utils/recurring';
 import { isInitialBalanceTx, normalizeDebtAccount } from '../utils/financial';
 
@@ -46,7 +47,6 @@ const DEFAULT_CATEGORIES = [
   { label: 'Salary', type: 'income', color: '#8b5cf6' },
   { label: 'Work', type: 'both', color: '#6366f1' },
   { label: 'Finance', type: 'both', color: '#14b8a6' },
-  { label: 'Uncategorized', type: 'both', color: '#64748b' },
 ];
 
 const DEFAULT_TAGS = [
@@ -978,6 +978,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addCategory = async (c: any) => {
+    if (isUncategorizedCategory(c.label)) throw new Error('Uncategorized is reserved for entries without a category.');
     const id = crypto.randomUUID();
     const now = Date.now();
     const color = c.color || CHART_COLORS[data.categories.length % CHART_COLORS.length];
@@ -994,6 +995,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateCategory = async (id: string, c: any) => {
+    if (!id || isUncategorizedCategory(c.label) || data.categories.some(cat => cat.id === id && isUncategorizedCategory(cat.label))) throw new Error('Uncategorized cannot be edited.');
     const now = Date.now();
     const docData = cleanData({ ...c, updatedAt: now });
     if (firebaseReady && db && user) {
@@ -1007,9 +1009,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteCategory = async (id: string) => {
-    // Reassign transactions to Uncategorized
-    const defaultCat = data.categories.find(c => c.id !== id && isUncategorizedCategory(c.label));
-    const uncategorizedId = defaultCat?.id || '';
+    if (!id || data.categories.some(cat => cat.id === id && isUncategorizedCategory(cat.label))) throw new Error('Uncategorized cannot be deleted.');
+    const uncategorizedId = '';
     
     if (firebaseReady && db && user) {
       const affected = data.transactions.filter(t => t.categoryId === id);
@@ -1144,6 +1145,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   return (
     <DataContext.Provider value={{
       ...data,
+      ...projectUncategorized(data.categories, data.transactions, data.recurringTransactions),
       bankImportReady: Boolean(user && importReadyUid === user.uid && !bankImportError),
       bankImportError,
       loading,
